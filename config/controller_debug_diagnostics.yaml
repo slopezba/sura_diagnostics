@@ -1,0 +1,10 @@
+/cirtesub/controller_debug_diagnostics:
+  ros__parameters:
+    debug_topic: /cirtesub/controller/debug
+    publish_period: 1.0
+    stale_timeout: 2.5
+    controller_frequency_hz: 50.0 # This value a fallback, the frequency is automatically updated based on the controller manager update rate if use_controller_manager_update_rate is true
+    use_controller_manager_update_rate: true
+    controller_manager_node: /cirtesub/controller/controller_manager
+    update_rate_refresh_period: 5.0
+    warning_time_margin_us: 1990.0

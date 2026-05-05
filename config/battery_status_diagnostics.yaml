@@ -1,0 +1,9 @@
+/cirtesub/battery_status_diagnostics:
+  ros__parameters:
+    battery_topic: /cirtesub/battery/status
+    publish_period: 2.0
+    stale_timeout: 3.0
+    warning_min_percentage: 0.20
+    ok_min_percentage: 0.30
+    warn_max_current_a: 60.0
+    error_max_current_a: 90.0

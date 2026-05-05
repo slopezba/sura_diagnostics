@@ -1,0 +1,7 @@
+navigator_frequency_diagnostics:
+  ros__parameters:
+    navigator_topic: /cirtesub/navigator/navigation
+    publish_period: 2.0
+    warn_min_frequency_hz: 10.0
+    error_min_frequency_hz: 2.0
+    stale_timeout: 3.0

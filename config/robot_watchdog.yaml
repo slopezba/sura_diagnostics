@@ -1,0 +1,7 @@
+/cirtesub/robot_watchdog:
+  ros__parameters:
+    navigator_topic: /cirtesub/navigator/navigation
+    publish_period: 1.0
+    warning_timeout: 3600.0
+    error_timeout_after_warning: 60.0
+    surface_z_threshold: 0.4

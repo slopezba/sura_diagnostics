@@ -1,0 +1,13 @@
+/cirtesub/imu_diagnostics:
+  ros__parameters:
+    sensor_topic: /cirtesub/sensors/imu_throttled
+    frequency_topic: /cirtesub/sensors/imu
+    publish_period: 1.0
+    stale_timeout: 3.0
+    frequency_window: 5.0
+    warn_min_frequency_hz: 40.0
+    error_min_frequency_hz: 10.0
+    warn_min_quaternion_norm: 0.9
+    warn_max_quaternion_norm: 1.1
+    error_min_quaternion_norm: 0.5
+    error_max_quaternion_norm: 1.5
