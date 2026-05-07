@@ -1,377 +1,267 @@
+import os
+from pathlib import Path
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-import os
+
+
+def namespaced_config(config_file, robot_namespace):
+    text = Path(config_file).read_text(encoding="utf-8")
+    text = text.replace("/cirtesub/", f"/{robot_namespace}/")
+    text = text.replace("cirtesub/", f"{robot_namespace}/")
+    text = text.replace("cirtesub_", f"{robot_namespace}_")
+    text = text.replace("CIRTESUB", robot_namespace.upper())
+
+    output_file = f"/tmp/sura_diagnostics_{robot_namespace}_{Path(config_file).name}"
+    Path(output_file).write_text(text, encoding="utf-8")
+    return output_file
+
+
+def throttle_node(name, robot_namespace, input_topic, rate, output_topic):
+    return Node(
+        package="topic_tools",
+        executable="throttle",
+        name=name,
+        namespace=robot_namespace,
+        output="screen",
+        arguments=["messages", input_topic, rate, output_topic],
+    )
+
+
+def diagnostics_node(executable, robot_namespace, config_file, overrides, remappings):
+    parameters = [config_file]
+    if overrides:
+        parameters.append(overrides)
+
+    return Node(
+        package="sura_diagnostics",
+        executable=executable,
+        namespace=robot_namespace,
+        output="screen",
+        parameters=parameters,
+        remappings=remappings,
+    )
+
+
+def launch_setup(context, *args, **kwargs):
+    robot_namespace = LaunchConfiguration("robot_namespace").perform(context).strip("/")
+    robot_variant = LaunchConfiguration("robot_variant").perform(context)
+    diagnostics_pkg = get_package_share_directory("sura_diagnostics")
+
+    def topic(path):
+        return f"/{robot_namespace}/{path}"
+
+    configs = {
+        name: namespaced_config(
+            os.path.join(diagnostics_pkg, "config", f"{name}.yaml"),
+            robot_namespace,
+        )
+        for name in [
+            "diagnostic_aggregator",
+            "controller_debug_diagnostics",
+            "battery_status_diagnostics",
+            "navigation_limits_diagnostics",
+            "gps_diagnostics",
+            "dvl_diagnostics",
+            "dvl_altitude_diagnostics",
+            "imu_diagnostics",
+            "pressure_diagnostics",
+            "leak_sensors_diagnostics",
+            "hardware_components_diagnostics",
+            "robot_watchdog",
+        ]
+    }
+
+    diagnostics_remappings = [
+        ("/diagnostics", topic("diagnostics")),
+        ("/diagnostics_agg", topic("diagnostics_agg")),
+        ("/diagnostics_toplevel_state", topic("diagnostics_toplevel_state")),
+    ]
+
+    navigator_topic = topic("navigator/navigation")
+    throttled_navigator_topic = topic("navigator/navigation_throttled")
+    gps_topic = topic("sensors/gps")
+    throttled_gps_topic = topic("sensors/gps_throttled")
+    dvl_twist_topic = topic("sensors/dvl/twist")
+    throttled_dvl_twist_topic = topic("sensors/dvl/twist_throttled")
+    dvl_altitude_topic = topic("sensors/dvl/altitude")
+    throttled_dvl_altitude_topic = topic("sensors/dvl/altitude_throttled")
+    imu_topic = topic("sensors/imu")
+    throttled_imu_topic = topic("sensors/imu_throttled")
+    pressure_topic = topic("sensors/pressure")
+    throttled_pressure_topic = topic("sensors/pressure_throttled")
+
+    hardware_component_names = [f"{robot_namespace}_thrusters"]
+    if robot_variant == "dual_alpha":
+        hardware_component_names.extend(
+            [f"{robot_namespace}/alpha_left", f"{robot_namespace}/alpha_right"]
+        )
+
+    return [
+        throttle_node(
+            "navigator_navigation_throttle",
+            robot_namespace,
+            navigator_topic,
+            LaunchConfiguration("navigator_throttle_rate"),
+            throttled_navigator_topic,
+        ),
+        throttle_node(
+            "gps_throttle",
+            robot_namespace,
+            gps_topic,
+            LaunchConfiguration("gps_throttle_rate"),
+            throttled_gps_topic,
+        ),
+        throttle_node(
+            "dvl_twist_throttle",
+            robot_namespace,
+            dvl_twist_topic,
+            LaunchConfiguration("dvl_twist_throttle_rate"),
+            throttled_dvl_twist_topic,
+        ),
+        throttle_node(
+            "dvl_altitude_throttle",
+            robot_namespace,
+            dvl_altitude_topic,
+            LaunchConfiguration("dvl_altitude_throttle_rate"),
+            throttled_dvl_altitude_topic,
+        ),
+        throttle_node(
+            "imu_throttle",
+            robot_namespace,
+            imu_topic,
+            LaunchConfiguration("imu_throttle_rate"),
+            throttled_imu_topic,
+        ),
+        throttle_node(
+            "pressure_throttle",
+            robot_namespace,
+            pressure_topic,
+            LaunchConfiguration("pressure_throttle_rate"),
+            throttled_pressure_topic,
+        ),
+        diagnostics_node(
+            "controller_debug_diagnostics",
+            robot_namespace,
+            configs["controller_debug_diagnostics"],
+            {
+                "debug_topic": topic("controller/debug"),
+                "controller_manager_node": topic("controller/controller_manager"),
+            },
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "navigation_limits_diagnostics",
+            robot_namespace,
+            configs["navigation_limits_diagnostics"],
+            {
+                "navigator_topic": throttled_navigator_topic,
+                "frequency_topic": navigator_topic,
+            },
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "gps_diagnostics",
+            robot_namespace,
+            configs["gps_diagnostics"],
+            {"sensor_topic": throttled_gps_topic, "frequency_topic": gps_topic},
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "dvl_diagnostics",
+            robot_namespace,
+            configs["dvl_diagnostics"],
+            {
+                "sensor_topic": throttled_dvl_twist_topic,
+                "frequency_topic": dvl_twist_topic,
+            },
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "dvl_altitude_diagnostics",
+            robot_namespace,
+            configs["dvl_altitude_diagnostics"],
+            {
+                "sensor_topic": throttled_dvl_altitude_topic,
+                "frequency_topic": dvl_altitude_topic,
+            },
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "imu_diagnostics",
+            robot_namespace,
+            configs["imu_diagnostics"],
+            {"sensor_topic": throttled_imu_topic, "frequency_topic": imu_topic},
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "pressure_diagnostics",
+            robot_namespace,
+            configs["pressure_diagnostics"],
+            {
+                "sensor_topic": throttled_pressure_topic,
+                "frequency_topic": pressure_topic,
+            },
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "battery_status_diagnostics",
+            robot_namespace,
+            configs["battery_status_diagnostics"],
+            {"battery_topic": topic("battery/status")},
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "leak_sensors_diagnostics",
+            robot_namespace,
+            configs["leak_sensors_diagnostics"],
+            {"leak_topic": topic("leak_sensors")},
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "hardware_components_diagnostics",
+            robot_namespace,
+            configs["hardware_components_diagnostics"],
+            {
+                "list_hardware_components_service": topic(
+                    "controller/controller_manager/list_hardware_components"
+                ),
+                "component_names": hardware_component_names,
+            },
+            diagnostics_remappings,
+        ),
+        diagnostics_node(
+            "robot_watchdog",
+            robot_namespace,
+            configs["robot_watchdog"],
+            {"navigator_topic": throttled_navigator_topic},
+            diagnostics_remappings,
+        ),
+        Node(
+            package="diagnostic_aggregator",
+            executable="aggregator_node",
+            namespace=robot_namespace,
+            output="screen",
+            parameters=[configs["diagnostic_aggregator"]],
+            remappings=diagnostics_remappings,
+        ),
+    ]
 
 
 def generate_launch_description():
-    navigator_topic = LaunchConfiguration("navigator_topic")
-    throttled_navigator_topic = LaunchConfiguration("throttled_navigator_topic")
-    navigator_throttle_rate = LaunchConfiguration("navigator_throttle_rate")
-    battery_topic = LaunchConfiguration("battery_topic")
-    leak_topic = LaunchConfiguration("leak_topic")
-    gps_topic = LaunchConfiguration("gps_topic")
-    throttled_gps_topic = LaunchConfiguration("throttled_gps_topic")
-    gps_throttle_rate = LaunchConfiguration("gps_throttle_rate")
-    dvl_twist_topic = LaunchConfiguration("dvl_twist_topic")
-    throttled_dvl_twist_topic = LaunchConfiguration("throttled_dvl_twist_topic")
-    dvl_twist_throttle_rate = LaunchConfiguration("dvl_twist_throttle_rate")
-    dvl_altitude_topic = LaunchConfiguration("dvl_altitude_topic")
-    throttled_dvl_altitude_topic = LaunchConfiguration("throttled_dvl_altitude_topic")
-    dvl_altitude_throttle_rate = LaunchConfiguration("dvl_altitude_throttle_rate")
-    imu_topic = LaunchConfiguration("imu_topic")
-    throttled_imu_topic = LaunchConfiguration("throttled_imu_topic")
-    imu_throttle_rate = LaunchConfiguration("imu_throttle_rate")
-    pressure_topic = LaunchConfiguration("pressure_topic")
-    throttled_pressure_topic = LaunchConfiguration("throttled_pressure_topic")
-    pressure_throttle_rate = LaunchConfiguration("pressure_throttle_rate")
-    namespace = "cirtesub"
-    diagnostics_remappings = [
-        ("/diagnostics", "/cirtesub/diagnostics"),
-        ("/diagnostics_agg", "/cirtesub/diagnostics_agg"),
-        ("/diagnostics_toplevel_state", "/cirtesub/diagnostics_toplevel_state"),
-    ]
-
-    diagnostics_pkg = get_package_share_directory("sura_diagnostics")
-    aggregator_config = os.path.join(
-        diagnostics_pkg, "config", "diagnostic_aggregator.yaml"
-    )
-    controller_debug_config = os.path.join(
-        diagnostics_pkg, "config", "controller_debug_diagnostics.yaml"
-    )
-    battery_status_config = os.path.join(
-        diagnostics_pkg, "config", "battery_status_diagnostics.yaml"
-    )
-    navigation_limits_config = os.path.join(
-        diagnostics_pkg, "config", "navigation_limits_diagnostics.yaml"
-    )
-    gps_diagnostics_config = os.path.join(
-        diagnostics_pkg, "config", "gps_diagnostics.yaml"
-    )
-    dvl_diagnostics_config = os.path.join(
-        diagnostics_pkg, "config", "dvl_diagnostics.yaml"
-    )
-    dvl_altitude_diagnostics_config = os.path.join(
-        diagnostics_pkg, "config", "dvl_altitude_diagnostics.yaml"
-    )
-    imu_diagnostics_config = os.path.join(
-        diagnostics_pkg, "config", "imu_diagnostics.yaml"
-    )
-    pressure_diagnostics_config = os.path.join(
-        diagnostics_pkg, "config", "pressure_diagnostics.yaml"
-    )
-    leak_sensors_config = os.path.join(
-        diagnostics_pkg, "config", "leak_sensors_diagnostics.yaml"
-    )
-    hardware_components_config = os.path.join(
-        diagnostics_pkg, "config", "hardware_components_diagnostics.yaml"
-    )
-    robot_watchdog_config = os.path.join(
-        diagnostics_pkg, "config", "robot_watchdog.yaml"
-    )
-
     return LaunchDescription(
         [
-            DeclareLaunchArgument(
-                "navigator_topic",
-                default_value="/cirtesub/navigator/navigation",
-            ),
-            DeclareLaunchArgument(
-                "throttled_navigator_topic",
-                default_value="/cirtesub/navigator/navigation_throttled",
-            ),
-            DeclareLaunchArgument(
-                "navigator_throttle_rate",
-                default_value="1.0",
-            ),
-            DeclareLaunchArgument(
-                "battery_topic",
-                default_value="/cirtesub/battery/status",
-            ),
-            DeclareLaunchArgument(
-                "leak_topic",
-                default_value="/cirtesub/leak_sensors",
-            ),
-            DeclareLaunchArgument(
-                "gps_topic",
-                default_value="/cirtesub/sensors/gps",
-            ),
-            DeclareLaunchArgument(
-                "throttled_gps_topic",
-                default_value="/cirtesub/sensors/gps_throttled",
-            ),
-            DeclareLaunchArgument(
-                "gps_throttle_rate",
-                default_value="1.0",
-            ),
-            DeclareLaunchArgument(
-                "dvl_twist_topic",
-                default_value="/cirtesub/sensors/dvl/twist",
-            ),
-            DeclareLaunchArgument(
-                "throttled_dvl_twist_topic",
-                default_value="/cirtesub/sensors/dvl/twist_throttled",
-            ),
-            DeclareLaunchArgument(
-                "dvl_twist_throttle_rate",
-                default_value="1.0",
-            ),
-            DeclareLaunchArgument(
-                "dvl_altitude_topic",
-                default_value="/cirtesub/sensors/dvl/altitude",
-            ),
-            DeclareLaunchArgument(
-                "throttled_dvl_altitude_topic",
-                default_value="/cirtesub/sensors/dvl/altitude_throttled",
-            ),
-            DeclareLaunchArgument(
-                "dvl_altitude_throttle_rate",
-                default_value="1.0",
-            ),
-            DeclareLaunchArgument(
-                "imu_topic",
-                default_value="/cirtesub/sensors/imu",
-            ),
-            DeclareLaunchArgument(
-                "throttled_imu_topic",
-                default_value="/cirtesub/sensors/imu_throttled",
-            ),
-            DeclareLaunchArgument(
-                "imu_throttle_rate",
-                default_value="1.0",
-            ),
-            DeclareLaunchArgument(
-                "pressure_topic",
-                default_value="/cirtesub/sensors/pressure",
-            ),
-            DeclareLaunchArgument(
-                "throttled_pressure_topic",
-                default_value="/cirtesub/sensors/pressure_throttled",
-            ),
-            DeclareLaunchArgument(
-                "pressure_throttle_rate",
-                default_value="1.0",
-            ),
-            Node(
-                package="topic_tools",
-                executable="throttle",
-                name="navigator_navigation_throttle",
-                namespace=namespace,
-                output="screen",
-                arguments=[
-                    "messages",
-                    navigator_topic,
-                    navigator_throttle_rate,
-                    throttled_navigator_topic,
-                ],
-            ),
-            Node(
-                package="topic_tools",
-                executable="throttle",
-                name="gps_throttle",
-                namespace=namespace,
-                output="screen",
-                arguments=[
-                    "messages",
-                    gps_topic,
-                    gps_throttle_rate,
-                    throttled_gps_topic,
-                ],
-            ),
-            Node(
-                package="topic_tools",
-                executable="throttle",
-                name="dvl_twist_throttle",
-                namespace=namespace,
-                output="screen",
-                arguments=[
-                    "messages",
-                    dvl_twist_topic,
-                    dvl_twist_throttle_rate,
-                    throttled_dvl_twist_topic,
-                ],
-            ),
-            Node(
-                package="topic_tools",
-                executable="throttle",
-                name="dvl_altitude_throttle",
-                namespace=namespace,
-                output="screen",
-                arguments=[
-                    "messages",
-                    dvl_altitude_topic,
-                    dvl_altitude_throttle_rate,
-                    throttled_dvl_altitude_topic,
-                ],
-            ),
-            Node(
-                package="topic_tools",
-                executable="throttle",
-                name="imu_throttle",
-                namespace=namespace,
-                output="screen",
-                arguments=[
-                    "messages",
-                    imu_topic,
-                    imu_throttle_rate,
-                    throttled_imu_topic,
-                ],
-            ),
-            Node(
-                package="topic_tools",
-                executable="throttle",
-                name="pressure_throttle",
-                namespace=namespace,
-                output="screen",
-                arguments=[
-                    "messages",
-                    pressure_topic,
-                    pressure_throttle_rate,
-                    throttled_pressure_topic,
-                ],
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="controller_debug_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[controller_debug_config],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="navigation_limits_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    navigation_limits_config,
-                    {
-                        "navigator_topic": throttled_navigator_topic,
-                        "frequency_topic": navigator_topic,
-                    },
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="gps_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    gps_diagnostics_config,
-                    {
-                        "sensor_topic": throttled_gps_topic,
-                        "frequency_topic": gps_topic,
-                    },
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="dvl_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    dvl_diagnostics_config,
-                    {
-                        "sensor_topic": throttled_dvl_twist_topic,
-                        "frequency_topic": dvl_twist_topic,
-                    },
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="dvl_altitude_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    dvl_altitude_diagnostics_config,
-                    {
-                        "sensor_topic": throttled_dvl_altitude_topic,
-                        "frequency_topic": dvl_altitude_topic,
-                    },
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="imu_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    imu_diagnostics_config,
-                    {
-                        "sensor_topic": throttled_imu_topic,
-                        "frequency_topic": imu_topic,
-                    },
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="pressure_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    pressure_diagnostics_config,
-                    {
-                        "sensor_topic": throttled_pressure_topic,
-                        "frequency_topic": pressure_topic,
-                    },
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="battery_status_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    battery_status_config,
-                    {"battery_topic": battery_topic},
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="leak_sensors_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    leak_sensors_config,
-                    {"leak_topic": leak_topic},
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="hardware_components_diagnostics",
-                namespace=namespace,
-                output="screen",
-                parameters=[hardware_components_config],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="sura_diagnostics",
-                executable="robot_watchdog",
-                namespace=namespace,
-                output="screen",
-                parameters=[
-                    robot_watchdog_config,
-                    {"navigator_topic": throttled_navigator_topic},
-                ],
-                remappings=diagnostics_remappings,
-            ),
-            Node(
-                package="diagnostic_aggregator",
-                executable="aggregator_node",
-                namespace=namespace,
-                output="screen",
-                parameters=[aggregator_config],
-                remappings=diagnostics_remappings,
-            ),
+            DeclareLaunchArgument("robot_namespace", default_value="sura"),
+            DeclareLaunchArgument("robot_variant", default_value="dual_alpha"),
+            DeclareLaunchArgument("navigator_throttle_rate", default_value="1.0"),
+            DeclareLaunchArgument("gps_throttle_rate", default_value="1.0"),
+            DeclareLaunchArgument("dvl_twist_throttle_rate", default_value="1.0"),
+            DeclareLaunchArgument("dvl_altitude_throttle_rate", default_value="1.0"),
+            DeclareLaunchArgument("imu_throttle_rate", default_value="1.0"),
+            DeclareLaunchArgument("pressure_throttle_rate", default_value="1.0"),
+            OpaqueFunction(function=launch_setup),
         ]
     )
