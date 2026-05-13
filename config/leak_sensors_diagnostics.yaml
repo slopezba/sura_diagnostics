@@ -5,4 +5,3 @@
     stale_timeout: 3.0
     sensor_frames:
       - cirtesub/main_cylinder
-      - cirtesub/battery_cylinder

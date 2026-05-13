@@ -89,16 +89,18 @@ sura_diagnostics/
 │   └── localization_frequency_diagnostics.yaml
 ├── launch/
 │   └── diagnostics.launch.py
-├── sura_diagnostics/
-│   ├── controller_debug_diagnostics.py
-│   ├── navigator_frequency_diagnostics.py
-│   ├── system_diagnostics.py
-│   ├── battery_diagnostics.py
-│   ├── leak_diagnostics.py
-│   ├── sensor_watchdog_diagnostics.py
-│   └── localization_frequency_diagnostics.py
+├── include/sura_diagnostics/
+│   ├── diagnostics_utils.hpp
+│   └── sensor_diagnostics_base.hpp
+├── src/
+│   ├── controller_debug_diagnostics.cpp
+│   ├── navigation_limits_diagnostics.cpp
+│   ├── battery_status_diagnostics.cpp
+│   ├── leak_sensors_diagnostics.cpp
+│   ├── sensor diagnostics nodes
+│   └── robot_watchdog.cpp
+├── CMakeLists.txt
 ├── package.xml
-└── setup.py
 ```
 
 Not all files should be implemented immediately. This is the target shape.
