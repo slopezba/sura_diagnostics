@@ -1,7 +1,0 @@
-/cirtesub/leak_sensors_diagnostics:
-  ros__parameters:
-    leak_topic: /cirtesub/leak_sensors
-    publish_period: 1.0
-    stale_timeout: 3.0
-    sensor_frames:
-      - cirtesub/main_cylinder

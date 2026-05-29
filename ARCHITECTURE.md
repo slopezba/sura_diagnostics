@@ -80,13 +80,7 @@ This diagnostic is evaluated every 2 seconds by default.
 sura_diagnostics/
 ├── ARCHITECTURE.md
 ├── config/
-│   ├── diagnostic_aggregator.yaml
-│   ├── navigator_frequency_diagnostics.yaml
-│   ├── system_diagnostics.yaml
-│   ├── battery_diagnostics.yaml
-│   ├── leak_diagnostics.yaml
-│   ├── sensor_watchdog_diagnostics.yaml
-│   └── localization_frequency_diagnostics.yaml
+│   └── diagnostics.yaml
 ├── launch/
 │   └── diagnostics.launch.py
 ├── include/sura_diagnostics/
@@ -333,7 +327,7 @@ Develop diagnostics in small vertical slices:
 
 1. Add one monitor.
 2. Publish to `/diagnostics`.
-3. Group it in `diagnostic_aggregator.yaml`.
+3. Configure it in `diagnostics.yaml`.
 4. Launch it.
 5. Test the OK case.
 6. Test WARN, ERROR, and STALE cases.

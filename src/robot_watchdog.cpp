@@ -24,13 +24,15 @@ public:
   RobotWatchdogNode()
   : Node("robot_watchdog")
   {
-    declare_parameter<std::string>("navigator_topic", "/cirtesub/navigator/navigation");
+    declare_parameter<std::string>("navigator_topic", "");
+    declare_parameter<std::string>("hardware_id", "robot_watchdog");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("warning_timeout", 3600.0);
     declare_parameter<double>("error_timeout_after_warning", 60.0);
     declare_parameter<double>("surface_z_threshold", 0.2);
 
     navigator_topic_ = get_parameter("navigator_topic").as_string();
+    hardware_id_ = get_parameter("hardware_id").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     warning_timeout_ = get_parameter("warning_timeout").as_double();
     error_timeout_after_warning_ = get_parameter("error_timeout_after_warning").as_double();
@@ -143,7 +145,7 @@ private:
   {
     DiagnosticStatus status;
     status.name = "/Watchdog/Robot";
-    status.hardware_id = "sura_robot_watchdog";
+    status.hardware_id = hardware_id_;
 
     if (watchdog_msg.state == RobotWatchdog::ERROR) {
       status.level = DiagnosticStatus::ERROR;
@@ -198,6 +200,7 @@ private:
   }
 
   std::string navigator_topic_;
+  std::string hardware_id_{"robot_watchdog"};
   double publish_period_{1.0};
   double warning_timeout_{3600.0};
   double error_timeout_after_warning_{60.0};

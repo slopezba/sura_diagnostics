@@ -34,13 +34,14 @@ public:
   ControllerDebugDiagnostics()
   : Node("controller_debug_diagnostics")
   {
-    declare_parameter<std::string>("debug_topic", "/cirtesub/controller/debug");
+    declare_parameter<std::string>("debug_topic", "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 2.5);
     declare_parameter<double>("controller_frequency_hz", 100.0);
+    declare_parameter<std::string>("hardware_id", "control_stack");
     declare_parameter<bool>("use_controller_manager_update_rate", true);
     declare_parameter<std::string>(
-      "controller_manager_node", "/cirtesub/controller/controller_manager");
+      "controller_manager_node", "");
     declare_parameter<double>("update_rate_refresh_period", 5.0);
     declare_parameter<double>("warning_time_margin_us", 2000.0);
 
@@ -48,6 +49,7 @@ public:
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     controller_frequency_hz_ = get_parameter("controller_frequency_hz").as_double();
+    hardware_id_ = get_parameter("hardware_id").as_string();
     use_controller_manager_update_rate_ =
       get_parameter("use_controller_manager_update_rate").as_bool();
     controller_manager_node_ = get_parameter("controller_manager_node").as_string();
@@ -160,7 +162,7 @@ private:
 
     DiagnosticStatus status;
     status.name = "/Controllers/" + display_controller_name(controller_name);
-    status.hardware_id = "cirtesub_control_stack";
+    status.hardware_id = hardware_id_;
 
     const auto configured_period_us = controller_period_us();
     const auto reported_period_us = msg.desired_period_us;
@@ -272,7 +274,7 @@ private:
   {
     DiagnosticStatus status;
     status.name = "/Controllers/Summary";
-    status.hardware_id = "cirtesub_control_stack";
+    status.hardware_id = hardware_id_;
     status.level = level;
     status.message = message;
     status.values = {
@@ -311,6 +313,7 @@ private:
   double publish_period_{1.0};
   double stale_timeout_{2.5};
   double controller_frequency_hz_{100.0};
+  std::string hardware_id_{"control_stack"};
   std::string controller_frequency_source_{"configured"};
   bool use_controller_manager_update_rate_{true};
   std::string controller_manager_node_;

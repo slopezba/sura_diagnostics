@@ -35,6 +35,7 @@ public:
   {
     declare_parameter<std::string>("sensor_topic", default_sensor_topic);
     declare_parameter<std::string>("frequency_topic", default_frequency_topic);
+    declare_parameter<std::string>("hardware_id", hardware_id);
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("frequency_window", 5.0);
@@ -43,6 +44,7 @@ public:
 
     sensor_topic_ = get_parameter("sensor_topic").as_string();
     frequency_topic_ = get_parameter("frequency_topic").as_string();
+    hardware_id_ = get_parameter("hardware_id").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     frequency_window_ = get_parameter("frequency_window").as_double();

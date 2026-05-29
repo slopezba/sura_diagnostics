@@ -22,8 +22,7 @@ class DvlDiagnostics : public SensorDiagnosticsBase<TwistWithCovarianceStamped>
 public:
   DvlDiagnostics()
   : SensorDiagnosticsBase(
-      "dvl_diagnostics", "/cirtesub/sensors/dvl/twist_throttled",
-      "/cirtesub/sensors/dvl/twist", "/Sensors/DVL", "cirtesub_dvl", 8.0, 2.0)
+      "dvl_diagnostics", "", "", "/Sensors/DVL", "dvl", 8.0, 2.0)
   {
   }
 

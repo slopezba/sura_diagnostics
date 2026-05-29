@@ -24,7 +24,8 @@ public:
   BatteryStatusDiagnostics()
   : Node("battery_status_diagnostics")
   {
-    declare_parameter<std::string>("battery_topic", "/cirtesub/battery/status");
+    declare_parameter<std::string>("battery_topic", "");
+    declare_parameter<std::string>("hardware_id", "battery");
     declare_parameter<double>("publish_period", 2.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("warning_min_percentage", 0.25);
@@ -33,6 +34,7 @@ public:
     declare_parameter<double>("error_max_current_a", 90.0);
 
     battery_topic_ = get_parameter("battery_topic").as_string();
+    hardware_id_ = get_parameter("hardware_id").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     warning_min_percentage_ = get_parameter("warning_min_percentage").as_double();
@@ -64,7 +66,7 @@ private:
 
     DiagnosticStatus status;
     status.name = "/Sensors/Battery";
-    status.hardware_id = "cirtesub_battery";
+    status.hardware_id = hardware_id_;
 
     double voltage = 0.0;
     double current_draw = 0.0;
@@ -135,6 +137,7 @@ private:
   }
 
   std::string battery_topic_;
+  std::string hardware_id_{"battery"};
   double publish_period_{2.0};
   double stale_timeout_{3.0};
   double warning_min_percentage_{0.25};

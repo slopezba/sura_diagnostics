@@ -29,11 +29,11 @@ public:
   {
     declare_parameter<std::string>(
       "list_hardware_components_service",
-      "/cirtesub/controller/controller_manager/list_hardware_components");
+      "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("service_timeout", 2.0);
     declare_parameter<std::vector<std::string>>(
-      "component_names", {"cirtesub_thrusters", "cirtesub/alpha_left", "cirtesub/alpha_right"});
+      "component_names", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>(
       "diagnostic_names", {"/Hardware/Thrusters", "/Hardware/Left Arm", "/Hardware/Right Arm"});
 

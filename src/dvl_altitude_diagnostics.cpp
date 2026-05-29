@@ -21,9 +21,7 @@ class DvlAltitudeDiagnostics : public SensorDiagnosticsBase<Range>
 public:
   DvlAltitudeDiagnostics()
   : SensorDiagnosticsBase(
-      "dvl_altitude_diagnostics", "/cirtesub/sensors/dvl/altitude_throttled",
-      "/cirtesub/sensors/dvl/altitude", "/Sensors/DVLAltitude", "cirtesub_dvl_altitude",
-      8.0, 2.0)
+      "dvl_altitude_diagnostics", "", "", "/Sensors/DVLAltitude", "dvl_altitude", 8.0, 2.0)
   {
   }
 

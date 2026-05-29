@@ -22,8 +22,7 @@ class PressureDiagnostics : public SensorDiagnosticsBase<FluidPressure>
 public:
   PressureDiagnostics()
   : SensorDiagnosticsBase(
-      "pressure_diagnostics", "/cirtesub/sensors/pressure_throttled",
-      "/cirtesub/sensors/pressure", "/Sensors/Pressure", "cirtesub_pressure", 0.8, 0.2)
+      "pressure_diagnostics", "", "", "/Sensors/Pressure", "pressure", 0.8, 0.2)
   {
     declare_parameter<double>("surface_pressure", 101325.0);
     declare_parameter<double>("fluid_density", 1000.0);

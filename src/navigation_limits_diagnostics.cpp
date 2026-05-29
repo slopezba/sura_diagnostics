@@ -27,8 +27,10 @@ public:
   NavigationLimitsDiagnostics()
   : Node("navigation_limits_diagnostics")
   {
-    declare_parameter<std::string>("navigator_topic", "/cirtesub/navigator/navigation_throttled");
-    declare_parameter<std::string>("frequency_topic", "/cirtesub/navigator/navigation");
+    declare_parameter<std::string>("navigator_topic", "");
+    declare_parameter<std::string>("frequency_topic", "");
+    declare_parameter<std::string>("limits_hardware_id", "navigation_limits");
+    declare_parameter<std::string>("frequency_hardware_id", "navigation");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("warn_min_frequency_hz", 10.0);
@@ -44,6 +46,8 @@ public:
 
     navigator_topic_ = get_parameter("navigator_topic").as_string();
     frequency_topic_ = get_parameter("frequency_topic").as_string();
+    limits_hardware_id_ = get_parameter("limits_hardware_id").as_string();
+    frequency_hardware_id_ = get_parameter("frequency_hardware_id").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     warn_min_frequency_hz_ = get_parameter("warn_min_frequency_hz").as_double();
@@ -177,7 +181,7 @@ private:
   {
     DiagnosticStatus status;
     status.name = name;
-    status.hardware_id = "sura_navigation_limits";
+    status.hardware_id = limits_hardware_id_;
     status.level = DiagnosticStatus::STALE;
     status.message = "Navigation limits input is stale";
     status.values = base_values(has_age, age_seconds);
@@ -189,7 +193,7 @@ private:
   {
     DiagnosticStatus status;
     status.name = "/Navigation/Frequency";
-    status.hardware_id = "sura_navigation";
+    status.hardware_id = frequency_hardware_id_;
     if (safety_msg.frequency_state == NavigationSafety::STALE) {
       status.level = DiagnosticStatus::STALE;
       status.message = "Navigator topic is stale";
@@ -221,7 +225,7 @@ private:
     const auto remaining_depth = max_depth_ - current_depth;
     DiagnosticStatus status;
     status.name = "/Navigation/DepthLimit";
-    status.hardware_id = "sura_navigation_limits";
+    status.hardware_id = limits_hardware_id_;
     if (remaining_depth < 0.0) {
       status.level = DiagnosticStatus::ERROR;
       status.message = "Maximum depth exceeded";
@@ -248,7 +252,7 @@ private:
     const auto remaining_altitude = current_altitude - min_altitude_;
     DiagnosticStatus status;
     status.name = "/Navigation/AltitudeLimit";
-    status.hardware_id = "sura_navigation_limits";
+    status.hardware_id = limits_hardware_id_;
     if (!std::isfinite(current_altitude) || current_altitude < 0.0) {
       status.level = DiagnosticStatus::ERROR;
       status.message = "Altitude data is invalid";
@@ -280,7 +284,7 @@ private:
     const auto remaining_radius = max_radius_ - distance_xy;
     DiagnosticStatus status;
     status.name = "/Navigation/AreaLimit";
-    status.hardware_id = "sura_navigation_limits";
+    status.hardware_id = limits_hardware_id_;
     if (remaining_radius < 0.0) {
       status.level = DiagnosticStatus::ERROR;
       status.message = "Maximum navigation radius exceeded";
@@ -360,6 +364,8 @@ private:
 
   std::string navigator_topic_;
   std::string frequency_topic_;
+  std::string limits_hardware_id_{"navigation_limits"};
+  std::string frequency_hardware_id_{"navigation"};
   double publish_period_{1.0};
   double stale_timeout_{3.0};
   double warn_min_frequency_hz_{10.0};

@@ -28,13 +28,15 @@ public:
   LeakSensorsDiagnostics()
   : Node("leak_sensors_diagnostics")
   {
-    declare_parameter<std::string>("leak_topic", "/cirtesub/leak_sensors");
+    declare_parameter<std::string>("leak_topic", "");
+    declare_parameter<std::string>("hardware_id", "leak_sensors");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<std::vector<std::string>>(
-      "sensor_frames", {"cirtesub/main_cylinder", "cirtesub/battery_cylinder"});
+      "sensor_frames", std::vector<std::string>{});
 
     leak_topic_ = get_parameter("leak_topic").as_string();
+    hardware_id_ = get_parameter("hardware_id").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
 
@@ -82,7 +84,7 @@ private:
 
     DiagnosticStatus status;
     status.name = "/Sensors/LeakSensors";
-    status.hardware_id = "cirtesub_leak_sensors";
+    status.hardware_id = hardware_id_;
     if (!leaking_frames.empty()) {
       status.level = DiagnosticStatus::ERROR;
       status.message = "Leak detected";
@@ -151,6 +153,7 @@ private:
   }
 
   std::string leak_topic_;
+  std::string hardware_id_{"leak_sensors"};
   double publish_period_{1.0};
   double stale_timeout_{3.0};
   std::map<std::string, LeakSensorState> states_;

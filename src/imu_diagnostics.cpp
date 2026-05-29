@@ -23,8 +23,7 @@ class ImuDiagnostics : public SensorDiagnosticsBase<Imu>
 public:
   ImuDiagnostics()
   : SensorDiagnosticsBase(
-      "imu_diagnostics", "/cirtesub/sensors/imu_throttled", "/cirtesub/sensors/imu",
-      "/Sensors/IMU", "cirtesub_imu", 40.0, 10.0)
+      "imu_diagnostics", "", "", "/Sensors/IMU", "imu", 40.0, 10.0)
   {
     declare_parameter<double>("warn_min_quaternion_norm", 0.9);
     declare_parameter<double>("warn_max_quaternion_norm", 1.1);

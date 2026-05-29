@@ -22,8 +22,7 @@ class GpsDiagnostics : public SensorDiagnosticsBase<NavSatFix>
 public:
   GpsDiagnostics()
   : SensorDiagnosticsBase(
-      "gps_diagnostics", "/cirtesub/sensors/gps_throttled", "/cirtesub/sensors/gps",
-      "/Sensors/GPS", "cirtesub_gps", 0.8, 0.2)
+      "gps_diagnostics", "", "", "/Sensors/GPS", "gps", 0.8, 0.2)
   {
   }
 
