@@ -14,6 +14,7 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(sura_msgs REQUIRED)
 
@@ -27,6 +28,7 @@ set(COMMON_DEPENDENCIES
   rcl_interfaces
   rclcpp
   sensor_msgs
+  std_msgs
   std_srvs
   sura_msgs
 )

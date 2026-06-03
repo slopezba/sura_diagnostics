@@ -105,7 +105,7 @@ diagnostics:
     enabled: true
     executable: leak_sensors_diagnostics
     parameters:
-      leak_topic: leak_sensors
+      leak_topic: sensors/leak
       hardware_id: "{namespace}_leak_sensors"
       publish_period: 1.0
       stale_timeout: 3.0
