@@ -19,6 +19,7 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>sura_msgs</depend>
+  <depend>visualization_msgs</depend>
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>diagnostic_aggregator</exec_depend>

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <deque>
 #include <limits>
@@ -11,6 +12,8 @@
 #include "sura_diagnostics/diagnostics_utils.hpp"
 #include "sura_msgs/msg/navigation_safety.hpp"
 #include "sura_msgs/msg/navigator.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 using diagnostic_msgs::msg::DiagnosticArray;
 using diagnostic_msgs::msg::DiagnosticStatus;
@@ -20,6 +23,8 @@ using sura_msgs::msg::Navigator;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
 using sura_diagnostics::optional_fixed_string;
+using visualization_msgs::msg::Marker;
+using visualization_msgs::msg::MarkerArray;
 
 class NavigationLimitsDiagnostics : public rclcpp::Node
 {
@@ -29,6 +34,8 @@ public:
   {
     declare_parameter<std::string>("navigator_topic", "");
     declare_parameter<std::string>("frequency_topic", "");
+    declare_parameter<std::string>("marker_topic", "navigation_limits/markers");
+    declare_parameter<std::string>("marker_frame_id", "world_ned");
     declare_parameter<std::string>("limits_hardware_id", "navigation_limits");
     declare_parameter<std::string>("frequency_hardware_id", "navigation");
     declare_parameter<double>("publish_period", 1.0);
@@ -43,23 +50,48 @@ public:
     declare_parameter<double>("center_y", 0.0);
     declare_parameter<double>("max_radius", 20.0);
     declare_parameter<double>("radius_warning_margin", 2.0);
+    const auto legacy_max_depth = get_parameter("max_depth").as_double();
+    const auto legacy_depth_warning_margin = get_parameter("depth_warning_margin").as_double();
+    const auto legacy_min_altitude = get_parameter("min_altitude").as_double();
+    const auto legacy_altitude_warning_margin = get_parameter("altitude_warning_margin").as_double();
+    const auto legacy_center_x = get_parameter("center_x").as_double();
+    const auto legacy_center_y = get_parameter("center_y").as_double();
+    const auto legacy_max_radius = get_parameter("max_radius").as_double();
+    const auto legacy_radius_warning_margin = get_parameter("radius_warning_margin").as_double();
+
+    declare_parameter<double>("depth.max", legacy_max_depth);
+    declare_parameter<double>("depth.warning_margin", legacy_depth_warning_margin);
+    declare_parameter<double>("altitude.min", legacy_min_altitude);
+    declare_parameter<double>("altitude.warning_margin", legacy_altitude_warning_margin);
+    declare_parameter<std::string>("area.shape", "circle");
+    declare_parameter<double>("area.center.x", legacy_center_x);
+    declare_parameter<double>("area.center.y", legacy_center_y);
+    declare_parameter<double>("area.circle.radius", legacy_max_radius);
+    declare_parameter<double>("area.rectangle.width", legacy_max_radius * 2.0);
+    declare_parameter<double>("area.rectangle.height", legacy_max_radius * 2.0);
+    declare_parameter<double>("area.warning_margin", legacy_radius_warning_margin);
 
     navigator_topic_ = get_parameter("navigator_topic").as_string();
     frequency_topic_ = get_parameter("frequency_topic").as_string();
+    marker_topic_ = get_parameter("marker_topic").as_string();
+    marker_frame_id_ = get_parameter("marker_frame_id").as_string();
     limits_hardware_id_ = get_parameter("limits_hardware_id").as_string();
     frequency_hardware_id_ = get_parameter("frequency_hardware_id").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     warn_min_frequency_hz_ = get_parameter("warn_min_frequency_hz").as_double();
     error_min_frequency_hz_ = get_parameter("error_min_frequency_hz").as_double();
-    max_depth_ = get_parameter("max_depth").as_double();
-    depth_warning_margin_ = get_parameter("depth_warning_margin").as_double();
-    min_altitude_ = get_parameter("min_altitude").as_double();
-    altitude_warning_margin_ = get_parameter("altitude_warning_margin").as_double();
-    center_x_ = get_parameter("center_x").as_double();
-    center_y_ = get_parameter("center_y").as_double();
-    max_radius_ = get_parameter("max_radius").as_double();
-    radius_warning_margin_ = get_parameter("radius_warning_margin").as_double();
+    max_depth_ = get_parameter("depth.max").as_double();
+    depth_warning_margin_ = get_parameter("depth.warning_margin").as_double();
+    min_altitude_ = get_parameter("altitude.min").as_double();
+    altitude_warning_margin_ = get_parameter("altitude.warning_margin").as_double();
+    area_shape_ = get_parameter("area.shape").as_string();
+    center_x_ = get_parameter("area.center.x").as_double();
+    center_y_ = get_parameter("area.center.y").as_double();
+    max_radius_ = get_parameter("area.circle.radius").as_double();
+    rectangle_width_ = get_parameter("area.rectangle.width").as_double();
+    rectangle_height_ = get_parameter("area.rectangle.height").as_double();
+    radius_warning_margin_ = get_parameter("area.warning_margin").as_double();
 
     subscription_ = create_subscription<Navigator>(
       navigator_topic_, 10, [this](const Navigator::SharedPtr msg) { on_navigator(msg); });
@@ -67,6 +99,7 @@ public:
       frequency_topic_, 10, [this](const Navigator::SharedPtr msg) { on_frequency_navigator(msg); });
     diagnostics_pub_ = create_publisher<DiagnosticArray>("/diagnostics", 10);
     safety_pub_ = create_publisher<NavigationSafety>("safety/navigation", 10);
+    markers_pub_ = create_publisher<MarkerArray>(marker_topic_, 10);
     timer_ = create_wall_timer(
       std::chrono::duration<double>(publish_period_), [this]() { publish_diagnostics(); });
   }
@@ -119,7 +152,306 @@ private:
     array_msg.header.stamp = now;
     array_msg.status = {depth_status, altitude_status, area_status, frequency_status};
     safety_pub_->publish(safety_msg);
+    markers_pub_->publish(build_marker_array(now));
     diagnostics_pub_->publish(array_msg);
+  }
+
+  MarkerArray build_marker_array(const rclcpp::Time & stamp) const
+  {
+    MarkerArray markers;
+    const auto warning_depth = max_depth_ - depth_warning_margin_;
+
+    if (area_is_rectangle()) {
+      const auto half_width = rectangle_width_ * 0.5;
+      const auto half_height = rectangle_height_ * 0.5;
+      const auto warning_half_width = half_width - radius_warning_margin_;
+      const auto warning_half_height = half_height - radius_warning_margin_;
+
+      markers.markers.push_back(build_rectangle_wall_marker(
+        stamp, "navigation_area_walls", 10, half_width, half_height, 0.0, max_depth_,
+        1.0F, 0.1F, 0.1F, 0.18F));
+      markers.markers.push_back(build_rectangle_marker(
+        stamp, "navigation_area", 0, half_width, half_height, 0.0, 1.0F, 0.1F, 0.1F, 0.9F));
+      markers.markers.push_back(build_rectangle_plane_marker(
+        stamp, "navigation_depth_planes", 12, half_width, half_height, max_depth_,
+        1.0F, 0.1F, 0.1F, 0.18F));
+      markers.markers.push_back(build_rectangle_marker(
+        stamp, "navigation_depth", 2, half_width, half_height, max_depth_,
+        1.0F, 0.1F, 0.1F, 0.9F));
+
+      if (warning_half_width > 0.0 && warning_half_height > 0.0 && warning_depth > 0.0) {
+        markers.markers.push_back(build_rectangle_wall_marker(
+          stamp, "navigation_area_walls", 11, warning_half_width, warning_half_height, 0.0,
+          warning_depth, 1.0F, 0.75F, 0.0F, 0.12F));
+        markers.markers.push_back(build_rectangle_marker(
+          stamp, "navigation_area", 1, warning_half_width, warning_half_height, 0.0,
+          1.0F, 0.75F, 0.0F, 0.9F));
+        markers.markers.push_back(build_rectangle_plane_marker(
+          stamp, "navigation_depth_planes", 13, warning_half_width, warning_half_height,
+          warning_depth, 1.0F, 0.75F, 0.0F, 0.12F));
+        markers.markers.push_back(build_rectangle_marker(
+          stamp, "navigation_depth", 3, warning_half_width, warning_half_height, warning_depth,
+          1.0F, 0.75F, 0.0F, 0.9F));
+      }
+      return markers;
+    }
+
+    markers.markers.push_back(build_cylinder_wall_marker(
+      stamp, "navigation_area_walls", 10, max_radius_, 0.0, max_depth_, 1.0F, 0.1F, 0.1F, 0.18F));
+    markers.markers.push_back(build_circle_marker(
+      stamp, "navigation_area", 0, max_radius_, 0.0, 1.0F, 0.1F, 0.1F, 0.9F));
+
+    const auto warning_radius = max_radius_ - radius_warning_margin_;
+    if (warning_radius > 0.0 && warning_depth > 0.0) {
+      markers.markers.push_back(build_cylinder_wall_marker(
+        stamp, "navigation_area_walls", 11, warning_radius, 0.0, warning_depth, 1.0F, 0.75F, 0.0F, 0.12F));
+      markers.markers.push_back(build_circle_marker(
+        stamp, "navigation_area", 1, warning_radius, 0.0, 1.0F, 0.75F, 0.0F, 0.9F));
+    }
+
+    markers.markers.push_back(build_depth_plane_marker(
+      stamp, "navigation_depth_planes", 12, max_radius_, max_depth_, 1.0F, 0.1F, 0.1F, 0.18F));
+    markers.markers.push_back(build_circle_marker(
+      stamp, "navigation_depth", 2, max_radius_, max_depth_, 1.0F, 0.1F, 0.1F, 0.9F));
+
+    if (warning_radius > 0.0 && warning_depth > 0.0) {
+      markers.markers.push_back(build_depth_plane_marker(
+        stamp, "navigation_depth_planes", 13, warning_radius, warning_depth, 1.0F, 0.75F, 0.0F, 0.12F));
+      markers.markers.push_back(build_circle_marker(
+        stamp, "navigation_depth", 3, warning_radius, warning_depth, 1.0F, 0.75F, 0.0F, 0.9F));
+    }
+    return markers;
+  }
+
+  Marker build_circle_marker(
+    const rclcpp::Time & stamp, const std::string & ns, int id, double radius, double z,
+    float red, float green, float blue, float alpha) const
+  {
+    Marker marker;
+    marker.header.frame_id = marker_frame_id_;
+    marker.header.stamp = stamp;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = Marker::LINE_STRIP;
+    marker.action = Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 0.04;
+    marker.color.r = red;
+    marker.color.g = green;
+    marker.color.b = blue;
+    marker.color.a = alpha;
+
+    constexpr int kSegments = 96;
+    const auto two_pi = 2.0 * std::acos(-1.0);
+    marker.points.reserve(kSegments + 1);
+    for (int i = 0; i <= kSegments; ++i) {
+      const auto angle = two_pi * static_cast<double>(i) / static_cast<double>(kSegments);
+      geometry_msgs::msg::Point point;
+      point.x = center_x_ + radius * std::cos(angle);
+      point.y = center_y_ + radius * std::sin(angle);
+      point.z = z;
+      marker.points.push_back(point);
+    }
+    return marker;
+  }
+
+  Marker build_rectangle_marker(
+    const rclcpp::Time & stamp, const std::string & ns, int id, double half_width,
+    double half_height, double z, float red, float green, float blue, float alpha) const
+  {
+    Marker marker;
+    marker.header.frame_id = marker_frame_id_;
+    marker.header.stamp = stamp;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = Marker::LINE_STRIP;
+    marker.action = Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 0.04;
+    marker.color.r = red;
+    marker.color.g = green;
+    marker.color.b = blue;
+    marker.color.a = alpha;
+
+    marker.points.push_back(point_at_offset(-half_width, -half_height, z));
+    marker.points.push_back(point_at_offset(half_width, -half_height, z));
+    marker.points.push_back(point_at_offset(half_width, half_height, z));
+    marker.points.push_back(point_at_offset(-half_width, half_height, z));
+    marker.points.push_back(point_at_offset(-half_width, -half_height, z));
+    return marker;
+  }
+
+  Marker build_cylinder_wall_marker(
+    const rclcpp::Time & stamp, const std::string & ns, int id, double radius,
+    double min_z, double max_z, float red, float green, float blue, float alpha) const
+  {
+    Marker marker;
+    marker.header.frame_id = marker_frame_id_;
+    marker.header.stamp = stamp;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = Marker::TRIANGLE_LIST;
+    marker.action = Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 1.0;
+    marker.scale.y = 1.0;
+    marker.scale.z = 1.0;
+    marker.color.r = red;
+    marker.color.g = green;
+    marker.color.b = blue;
+    marker.color.a = alpha;
+
+    constexpr int kSegments = 96;
+    const auto two_pi = 2.0 * std::acos(-1.0);
+    marker.points.reserve(kSegments * 6);
+    for (int i = 0; i < kSegments; ++i) {
+      const auto angle_a = two_pi * static_cast<double>(i) / static_cast<double>(kSegments);
+      const auto angle_b = two_pi * static_cast<double>(i + 1) / static_cast<double>(kSegments);
+
+      const auto bottom_a = point_on_circle(radius, angle_a, min_z);
+      const auto bottom_b = point_on_circle(radius, angle_b, min_z);
+      const auto top_b = point_on_circle(radius, angle_b, max_z);
+      const auto top_a = point_on_circle(radius, angle_a, max_z);
+
+      marker.points.push_back(bottom_a);
+      marker.points.push_back(bottom_b);
+      marker.points.push_back(top_b);
+      marker.points.push_back(bottom_a);
+      marker.points.push_back(top_b);
+      marker.points.push_back(top_a);
+    }
+    return marker;
+  }
+
+  Marker build_rectangle_wall_marker(
+    const rclcpp::Time & stamp, const std::string & ns, int id, double half_width,
+    double half_height, double min_z, double max_z, float red, float green, float blue,
+    float alpha) const
+  {
+    Marker marker;
+    marker.header.frame_id = marker_frame_id_;
+    marker.header.stamp = stamp;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = Marker::TRIANGLE_LIST;
+    marker.action = Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 1.0;
+    marker.scale.y = 1.0;
+    marker.scale.z = 1.0;
+    marker.color.r = red;
+    marker.color.g = green;
+    marker.color.b = blue;
+    marker.color.a = alpha;
+
+    const std::vector<geometry_msgs::msg::Point> bottom = {
+      point_at_offset(-half_width, -half_height, min_z),
+      point_at_offset(half_width, -half_height, min_z),
+      point_at_offset(half_width, half_height, min_z),
+      point_at_offset(-half_width, half_height, min_z),
+    };
+    const std::vector<geometry_msgs::msg::Point> top = {
+      point_at_offset(-half_width, -half_height, max_z),
+      point_at_offset(half_width, -half_height, max_z),
+      point_at_offset(half_width, half_height, max_z),
+      point_at_offset(-half_width, half_height, max_z),
+    };
+
+    marker.points.reserve(24);
+    for (std::size_t i = 0; i < bottom.size(); ++i) {
+      const auto next = (i + 1) % bottom.size();
+      marker.points.push_back(bottom[i]);
+      marker.points.push_back(bottom[next]);
+      marker.points.push_back(top[next]);
+      marker.points.push_back(bottom[i]);
+      marker.points.push_back(top[next]);
+      marker.points.push_back(top[i]);
+    }
+    return marker;
+  }
+
+  Marker build_depth_plane_marker(
+    const rclcpp::Time & stamp, const std::string & ns, int id, double radius, double z,
+    float red, float green, float blue, float alpha) const
+  {
+    Marker marker;
+    marker.header.frame_id = marker_frame_id_;
+    marker.header.stamp = stamp;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = Marker::TRIANGLE_LIST;
+    marker.action = Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 1.0;
+    marker.scale.y = 1.0;
+    marker.scale.z = 1.0;
+    marker.color.r = red;
+    marker.color.g = green;
+    marker.color.b = blue;
+    marker.color.a = alpha;
+
+    constexpr int kSegments = 96;
+    const auto two_pi = 2.0 * std::acos(-1.0);
+    marker.points.reserve(kSegments * 3);
+    for (int i = 0; i < kSegments; ++i) {
+      const auto angle_a = two_pi * static_cast<double>(i) / static_cast<double>(kSegments);
+      const auto angle_b = two_pi * static_cast<double>(i + 1) / static_cast<double>(kSegments);
+      geometry_msgs::msg::Point center;
+      center.x = center_x_;
+      center.y = center_y_;
+      center.z = z;
+      marker.points.push_back(center);
+      marker.points.push_back(point_on_circle(radius, angle_a, z));
+      marker.points.push_back(point_on_circle(radius, angle_b, z));
+    }
+    return marker;
+  }
+
+  Marker build_rectangle_plane_marker(
+    const rclcpp::Time & stamp, const std::string & ns, int id, double half_width,
+    double half_height, double z, float red, float green, float blue, float alpha) const
+  {
+    Marker marker;
+    marker.header.frame_id = marker_frame_id_;
+    marker.header.stamp = stamp;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = Marker::TRIANGLE_LIST;
+    marker.action = Marker::ADD;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 1.0;
+    marker.scale.y = 1.0;
+    marker.scale.z = 1.0;
+    marker.color.r = red;
+    marker.color.g = green;
+    marker.color.b = blue;
+    marker.color.a = alpha;
+
+    const auto a = point_at_offset(-half_width, -half_height, z);
+    const auto b = point_at_offset(half_width, -half_height, z);
+    const auto c = point_at_offset(half_width, half_height, z);
+    const auto d = point_at_offset(-half_width, half_height, z);
+
+    marker.points = {a, b, c, a, c, d};
+    return marker;
+  }
+
+  geometry_msgs::msg::Point point_on_circle(double radius, double angle, double z) const
+  {
+    geometry_msgs::msg::Point point;
+    point.x = center_x_ + radius * std::cos(angle);
+    point.y = center_y_ + radius * std::sin(angle);
+    point.z = z;
+    return point;
+  }
+
+  geometry_msgs::msg::Point point_at_offset(double x_offset, double y_offset, double z) const
+  {
+    geometry_msgs::msg::Point point;
+    point.x = center_x_ + x_offset;
+    point.y = center_y_ + y_offset;
+    point.z = z;
+    return point;
   }
 
   NavigationSafety build_safety_msg(
@@ -148,16 +480,16 @@ private:
 
       const auto current_x = static_cast<double>(last_navigation_msg_->position.position.x);
       const auto current_y = static_cast<double>(last_navigation_msg_->position.position.y);
-      const auto area_distance = std::hypot(current_x - center_x_, current_y - center_y_);
-      const auto area_warn_limit = max_radius_ - radius_warning_margin_;
-      msg.area_state = state_from_limits(area_distance, area_warn_limit, max_radius_);
-      msg.area_distance = area_distance;
-      msg.area_remaining_to_warning = area_warn_limit - area_distance;
-      msg.area_remaining_to_error = max_radius_ - area_distance;
+      const auto area = evaluate_area(current_x, current_y);
+      msg.area_state = area.state;
+      msg.area_distance = area.distance;
+      msg.area_remaining_to_warning = area.remaining_to_warning;
+      msg.area_remaining_to_error = area.remaining_to_error;
     }
 
     msg.depth_limit = max_depth_;
-    msg.area_limit = max_radius_;
+    msg.area_limit = area_is_rectangle() ?
+      std::min(rectangle_width_, rectangle_height_) * 0.5 : max_radius_;
 
     const auto frequency = frequency_hz();
     msg.frequency_hz = frequency;
@@ -280,17 +612,18 @@ private:
   {
     const auto current_x = static_cast<double>(msg.position.position.x);
     const auto current_y = static_cast<double>(msg.position.position.y);
-    const auto distance_xy = std::hypot(current_x - center_x_, current_y - center_y_);
-    const auto remaining_radius = max_radius_ - distance_xy;
+    const auto area = evaluate_area(current_x, current_y);
     DiagnosticStatus status;
     status.name = "/Navigation/AreaLimit";
     status.hardware_id = limits_hardware_id_;
-    if (remaining_radius < 0.0) {
+    if (area.state == NavigationSafety::ERROR) {
       status.level = DiagnosticStatus::ERROR;
-      status.message = "Maximum navigation radius exceeded";
-    } else if (remaining_radius <= radius_warning_margin_) {
+      status.message = area_is_rectangle() ?
+        "Navigation rectangle exceeded" : "Maximum navigation radius exceeded";
+    } else if (area.state == NavigationSafety::WARN) {
       status.level = DiagnosticStatus::WARN;
-      status.message = "Approaching maximum navigation radius";
+      status.message = area_is_rectangle() ?
+        "Approaching navigation rectangle boundary" : "Approaching maximum navigation radius";
     } else {
       status.level = DiagnosticStatus::OK;
       status.message = "Navigation area inside limits";
@@ -301,12 +634,71 @@ private:
       key_value("current_y", fixed_string(current_y, 3)),
       key_value("center_x", fixed_string(center_x_, 3)),
       key_value("center_y", fixed_string(center_y_, 3)),
-      key_value("distance_xy", fixed_string(distance_xy, 3)),
-      key_value("max_radius", fixed_string(max_radius_, 3)),
-      key_value("remaining_radius_margin", fixed_string(remaining_radius, 3)),
-      key_value("radius_warning_margin", fixed_string(radius_warning_margin_, 3)),
+      key_value("shape", area_shape_),
+      key_value("distance_xy", fixed_string(area.distance, 3)),
+      key_value("remaining_area_margin", fixed_string(area.remaining_to_error, 3)),
+      key_value("area_warning_margin", fixed_string(radius_warning_margin_, 3)),
     });
+    if (area_is_rectangle()) {
+      append_values(status.values, {
+        key_value("width", fixed_string(rectangle_width_, 3)),
+        key_value("height", fixed_string(rectangle_height_, 3)),
+      });
+    } else {
+      append_values(status.values, {
+        key_value("radius", fixed_string(max_radius_, 3)),
+      });
+    }
     return status;
+  }
+
+  struct AreaEvaluation
+  {
+    unsigned char state{NavigationSafety::OK};
+    double distance{0.0};
+    double remaining_to_warning{0.0};
+    double remaining_to_error{0.0};
+  };
+
+  AreaEvaluation evaluate_area(double current_x, double current_y) const
+  {
+    const auto dx = current_x - center_x_;
+    const auto dy = current_y - center_y_;
+    if (area_is_rectangle()) {
+      const auto half_width = rectangle_width_ * 0.5;
+      const auto half_height = rectangle_height_ * 0.5;
+      const auto remaining_x = half_width - std::abs(dx);
+      const auto remaining_y = half_height - std::abs(dy);
+      const auto remaining = std::min(remaining_x, remaining_y);
+      AreaEvaluation evaluation;
+      evaluation.distance = std::hypot(dx, dy);
+      evaluation.remaining_to_warning = remaining - radius_warning_margin_;
+      evaluation.remaining_to_error = remaining;
+      if (remaining < 0.0) {
+        evaluation.state = NavigationSafety::ERROR;
+      } else if (remaining <= radius_warning_margin_) {
+        evaluation.state = NavigationSafety::WARN;
+      }
+      return evaluation;
+    }
+
+    const auto distance_xy = std::hypot(dx, dy);
+    const auto remaining_radius = max_radius_ - distance_xy;
+    AreaEvaluation evaluation;
+    evaluation.distance = distance_xy;
+    evaluation.remaining_to_warning = remaining_radius - radius_warning_margin_;
+    evaluation.remaining_to_error = remaining_radius;
+    if (remaining_radius < 0.0) {
+      evaluation.state = NavigationSafety::ERROR;
+    } else if (remaining_radius <= radius_warning_margin_) {
+      evaluation.state = NavigationSafety::WARN;
+    }
+    return evaluation;
+  }
+
+  bool area_is_rectangle() const
+  {
+    return area_shape_ == "rectangle" || area_shape_ == "rect";
   }
 
   std::vector<KeyValue> base_values(bool has_age, double age_seconds) const
@@ -364,6 +756,8 @@ private:
 
   std::string navigator_topic_;
   std::string frequency_topic_;
+  std::string marker_topic_;
+  std::string marker_frame_id_{"world_ned"};
   std::string limits_hardware_id_{"navigation_limits"};
   std::string frequency_hardware_id_{"navigation"};
   double publish_period_{1.0};
@@ -374,9 +768,12 @@ private:
   double depth_warning_margin_{0.5};
   double min_altitude_{0.5};
   double altitude_warning_margin_{0.5};
+  std::string area_shape_{"circle"};
   double center_x_{0.0};
   double center_y_{0.0};
   double max_radius_{20.0};
+  double rectangle_width_{40.0};
+  double rectangle_height_{40.0};
   double radius_warning_margin_{2.0};
   Navigator::SharedPtr last_navigation_msg_;
   bool has_last_message_time_{false};
@@ -388,6 +785,7 @@ private:
   rclcpp::Subscription<Navigator>::SharedPtr frequency_subscription_;
   rclcpp::Publisher<DiagnosticArray>::SharedPtr diagnostics_pub_;
   rclcpp::Publisher<NavigationSafety>::SharedPtr safety_pub_;
+  rclcpp::Publisher<MarkerArray>::SharedPtr markers_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

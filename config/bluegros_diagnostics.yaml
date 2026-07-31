@@ -1,0 +1,237 @@
+aggregator:
+  enabled: true
+  parameters:
+    path: ""
+    pub_rate: 1.0
+    controllers:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Controllers
+      startswith: [/Controllers]
+    navigation:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Navigation
+      startswith: [/Navigation]
+    sensors:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Sensors
+      startswith: [/Sensors]
+    hardware:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Hardware
+      startswith: [/Hardware]
+    watchdog:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Watchdog
+      startswith: [/Watchdog, Watchdog]
+      contains: [Watchdog/Robot]
+
+diagnostics:
+  controller_debug_diagnostics:
+    enabled: true
+    executable: controller_debug_diagnostics
+    parameters:
+      debug_topic: controller/debug
+      hardware_id: "{namespace}_control_stack"
+      publish_period: 1.0
+      stale_timeout: 2.5
+      controller_frequency_hz: 50.0
+      use_controller_manager_update_rate: true
+      controller_manager_node: controller/controller_manager
+      update_rate_refresh_period: 5.0
+      warning_time_margin_us: 1990.0
+
+  navigation_limits_diagnostics:
+    enabled: true
+    executable: navigation_limits_diagnostics
+    parameters:
+      navigator_topic: navigator/navigation
+      frequency_topic: navigator/navigation
+      marker_topic: navigation_limits/markers
+      marker_frame_id: world_ned
+      limits_hardware_id: "{namespace}_navigation_limits"
+      frequency_hardware_id: "{namespace}_navigation"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      warn_min_frequency_hz: 10.0
+      error_min_frequency_hz: 2.0
+      depth:
+        max:  5.0 # 5.0
+        warning_margin: 0.5
+      altitude:
+        min: 0.3
+        warning_margin: 0.5
+      area:
+        shape: rectangle # or circle
+        center:
+          x: 0.0
+          y: 0.0
+        warning_margin: 0.5
+        # circle:
+        #   radius: 4.0
+        rectangle:
+          width: 12.0 #12.0
+          height: 8.0 #8.0
+
+  battery_status_diagnostics:
+    enabled: true
+    executable: battery_status_diagnostics
+    parameters:
+      battery_topic: sensors/battery
+      hardware_id: "{namespace}_battery"
+      publish_period: 2.0
+      stale_timeout: 3.0
+      warning_min_percentage: 0.20
+      ok_min_percentage: 0.30
+      warn_max_current_a: 60.0
+      error_max_current_a: 90.0
+
+  hardware_components_diagnostics:
+    enabled: true
+    executable: hardware_components_diagnostics
+    parameters:
+      list_hardware_components_service: controller/controller_manager/list_hardware_components
+      publish_period: 2.0
+      service_timeout: 2.0
+      component_names:
+        - "{namespace}_thrusters"
+        - "{namespace}_sensors"
+        - "{namespace}_actuators"
+      diagnostic_names:
+        - /Hardware/Thrusters
+        - /Hardware/Sensors
+        - /Hardware/Actuators
+
+  robot_watchdog:
+    enabled: true
+    executable: robot_watchdog
+    parameters:
+      navigator_topic: navigator/navigation_throttled
+      hardware_id: "{namespace}_robot_watchdog"
+      publish_period: 1.0
+      warning_timeout: 3600.0
+      error_timeout_after_warning: 60.0
+      surface_z_threshold: 0.4
+
+  leak_sensors_diagnostics:
+    enabled: true
+    executable: leak_sensors_diagnostics
+    parameters:
+      leak_topic: sensors/leak
+      hardware_id: "{namespace}_leak_sensors"
+      publish_period: 1.0
+      stale_timeout: 3.0
+
+  front_obstacle_diagnostics:
+    enabled: true
+    executable: front_obstacle_diagnostics
+    parameters:
+      depth_image_topic: stonefish/front_depth_camera/image_depth
+      sensor_hardware_id: "{namespace}_front_depth_camera"
+      navigation_hardware_id: "{namespace}_front_obstacle"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 5.0
+      warn_min_frequency_hz: 5.0
+      warning_distance_m: 1.0
+      error_distance_m: 0.5
+      min_valid_depth_m: 0.05
+      max_valid_depth_m: 10.0
+      roi_center_fraction_width: 0.6
+      roi_center_fraction_height: 0.6
+      min_valid_pixel_ratio: 0.01
+
+sensors:
+  gps:
+    enabled: true
+    executable: gps_diagnostics
+    topic: sensors/gps
+    throttled_topic: sensors/gps_throttled
+    throttle_rate: 1.0
+    parameters:
+      hardware_id: "{namespace}_gps"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 10.0
+      warn_min_frequency_hz: 0.8
+      error_min_frequency_hz: 0.2
+
+  imu:
+    enabled: true
+    executable: imu_diagnostics
+    topic: sensors/imu
+    throttled_topic: sensors/imu_throttled
+    throttle_rate: 1.0
+    parameters:
+      hardware_id: "{namespace}_imu"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 5.0
+      warn_min_frequency_hz: 40.0
+      error_min_frequency_hz: 10.0
+      warn_min_quaternion_norm: 0.9
+      warn_max_quaternion_norm: 1.1
+      error_min_quaternion_norm: 0.5
+      error_max_quaternion_norm: 1.5
+
+  dvl:
+    enabled: true
+    executable: dvl_diagnostics
+    topic: sensors/dvl/twist
+    throttled_topic: sensors/dvl/twist_throttled
+    throttle_rate: 1.0
+    parameters:
+      hardware_id: "{namespace}_dvl"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 5.0
+      warn_min_frequency_hz: 8.0
+      error_min_frequency_hz: 2.0
+
+  dvl_altitude:
+    enabled: true
+    executable: dvl_altitude_diagnostics
+    topic: sensors/dvl/altitude
+    throttled_topic: sensors/dvl/altitude_throttled
+    throttle_rate: 1.0
+    parameters:
+      hardware_id: "{namespace}_dvl_altitude"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 5.0
+      warn_min_frequency_hz: 8.0
+      error_min_frequency_hz: 2.0
+
+  pressure:
+    enabled: true
+    executable: pressure_diagnostics
+    topic: sensors/pressure
+    throttled_topic: sensors/pressure_throttled
+    throttle_rate: 1.0
+    parameters:
+      hardware_id: "{namespace}_pressure"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 10.0
+      warn_min_frequency_hz: 0.8
+      error_min_frequency_hz: 0.2
+      surface_pressure: 101325.0
+      fluid_density: 1000.0
+      gravity: 9.80665
+
+  aruco_pose:
+    enabled: true
+    executable: aruco_pose_diagnostics
+    topic: sensors/aruco/pose_enu
+    throttled_topic: sensors/aruco/pose_enu_throttled
+    throttle_rate: 5.0
+    parameters:
+      hardware_id: "{namespace}_aruco_pose"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 5.0
+      warn_min_frequency_hz: 5.0
+      error_min_frequency_hz: 1.0
+      warn_min_quaternion_norm: 0.9
+      warn_max_quaternion_norm: 1.1
+      error_min_quaternion_norm: 0.5
+      error_max_quaternion_norm: 1.5

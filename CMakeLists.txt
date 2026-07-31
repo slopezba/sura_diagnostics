@@ -17,6 +17,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(sura_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 include_directories(include)
 
@@ -31,13 +32,16 @@ set(COMMON_DEPENDENCIES
   std_msgs
   std_srvs
   sura_msgs
+  visualization_msgs
 )
 
 set(DIAGNOSTIC_EXECUTABLES
+  aruco_pose_diagnostics
   battery_status_diagnostics
   controller_debug_diagnostics
   dvl_altitude_diagnostics
   dvl_diagnostics
+  front_obstacle_diagnostics
   gps_diagnostics
   hardware_components_diagnostics
   imu_diagnostics

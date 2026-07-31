@@ -44,22 +44,33 @@ diagnostics:
     enabled: true
     executable: navigation_limits_diagnostics
     parameters:
-      navigator_topic: navigator/navigation_throttled
+      navigator_topic: navigator/navigation
       frequency_topic: navigator/navigation
+      marker_topic: navigation_limits/markers
+      marker_frame_id: world_ned
       limits_hardware_id: "{namespace}_navigation_limits"
       frequency_hardware_id: "{namespace}_navigation"
       publish_period: 1.0
       stale_timeout: 3.0
       warn_min_frequency_hz: 10.0
       error_min_frequency_hz: 2.0
-      max_depth: 4.0
-      depth_warning_margin: 0.5
-      min_altitude: 0.3
-      altitude_warning_margin: 0.5
-      center_x: 0.0
-      center_y: 0.0
-      max_radius: 4.0
-      radius_warning_margin: 0.5
+      depth:
+        max:  5.0 # 5.0
+        warning_margin: 0.5
+      altitude:
+        min: 0.3
+        warning_margin: 0.5
+      area:
+        shape: rectangle # or circle
+        center:
+          x: 0.0
+          y: 0.0
+        warning_margin: 0.5
+        # circle:
+        #   radius: 4.0
+        rectangle:
+          width: 12.0 #12.0
+          height: 8.0 #8.0
 
   battery_status_diagnostics:
     enabled: true
@@ -114,7 +125,7 @@ sensors:
   gps:
     enabled: true
     executable: gps_diagnostics
-    topic: sensors/gps/fix
+    topic: sensors/gps
     throttled_topic: sensors/gps_throttled
     throttle_rate: 1.0
     parameters:
@@ -187,3 +198,21 @@ sensors:
       surface_pressure: 101325.0
       fluid_density: 1000.0
       gravity: 9.80665
+
+  aruco_pose:
+    enabled: true
+    executable: aruco_pose_diagnostics
+    topic: sensors/aruco/pose_enu
+    throttled_topic: sensors/aruco/pose_enu_throttled
+    throttle_rate: 5.0
+    parameters:
+      hardware_id: "{namespace}_aruco_pose"
+      publish_period: 1.0
+      stale_timeout: 3.0
+      frequency_window: 5.0
+      warn_min_frequency_hz: 5.0
+      error_min_frequency_hz: 1.0
+      warn_min_quaternion_norm: 0.9
+      warn_max_quaternion_norm: 1.1
+      error_min_quaternion_norm: 0.5
+      error_max_quaternion_norm: 1.5
