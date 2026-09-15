@@ -12,6 +12,7 @@ using diagnostic_msgs::msg::KeyValue;
 using std_msgs::msg::Bool;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
+using sura_diagnostics::prefixed_diagnostic_name;
 
 class LeakSensorsDiagnostics : public rclcpp::Node
 {
@@ -21,11 +22,13 @@ public:
   {
     declare_parameter<std::string>("leak_topic", "");
     declare_parameter<std::string>("hardware_id", "leak_sensors");
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
 
     leak_topic_ = get_parameter("leak_topic").as_string();
     hardware_id_ = get_parameter("hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
 
@@ -51,7 +54,7 @@ private:
     const bool stale = !has_state_ || seconds - last_update_seconds_ > stale_timeout_;
 
     DiagnosticStatus status;
-    status.name = "/Sensors/LeakSensors";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Sensors/LeakSensors");
     status.hardware_id = hardware_id_;
     if (stale) {
       status.level = DiagnosticStatus::STALE;
@@ -86,6 +89,7 @@ private:
 
   std::string leak_topic_;
   std::string hardware_id_{"leak_sensors"};
+  std::string robot_namespace_;
   double publish_period_{1.0};
   double stale_timeout_{3.0};
   bool has_state_{false};

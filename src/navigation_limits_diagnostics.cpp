@@ -23,6 +23,7 @@ using sura_msgs::msg::Navigator;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
 using sura_diagnostics::optional_fixed_string;
+using sura_diagnostics::prefixed_diagnostic_name;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 
@@ -38,6 +39,7 @@ public:
     declare_parameter<std::string>("marker_frame_id", "world_ned");
     declare_parameter<std::string>("limits_hardware_id", "navigation_limits");
     declare_parameter<std::string>("frequency_hardware_id", "navigation");
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("warn_min_frequency_hz", 10.0);
@@ -77,6 +79,7 @@ public:
     marker_frame_id_ = get_parameter("marker_frame_id").as_string();
     limits_hardware_id_ = get_parameter("limits_hardware_id").as_string();
     frequency_hardware_id_ = get_parameter("frequency_hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     warn_min_frequency_hz_ = get_parameter("warn_min_frequency_hz").as_double();
@@ -512,7 +515,7 @@ private:
   DiagnosticStatus build_stale_status(const std::string & name, bool has_age, double age_seconds)
   {
     DiagnosticStatus status;
-    status.name = name;
+    status.name = prefixed_diagnostic_name(robot_namespace_, name);
     status.hardware_id = limits_hardware_id_;
     status.level = DiagnosticStatus::STALE;
     status.message = "Navigation limits input is stale";
@@ -524,7 +527,7 @@ private:
     const NavigationSafety & safety_msg, bool has_age, double age_seconds)
   {
     DiagnosticStatus status;
-    status.name = "/Navigation/Frequency";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Navigation/Frequency");
     status.hardware_id = frequency_hardware_id_;
     if (safety_msg.frequency_state == NavigationSafety::STALE) {
       status.level = DiagnosticStatus::STALE;
@@ -556,7 +559,7 @@ private:
     const auto current_depth = static_cast<double>(msg.position.position.z);
     const auto remaining_depth = max_depth_ - current_depth;
     DiagnosticStatus status;
-    status.name = "/Navigation/DepthLimit";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Navigation/DepthLimit");
     status.hardware_id = limits_hardware_id_;
     if (remaining_depth < 0.0) {
       status.level = DiagnosticStatus::ERROR;
@@ -583,7 +586,7 @@ private:
     const auto current_altitude = static_cast<double>(msg.altitude);
     const auto remaining_altitude = current_altitude - min_altitude_;
     DiagnosticStatus status;
-    status.name = "/Navigation/AltitudeLimit";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Navigation/AltitudeLimit");
     status.hardware_id = limits_hardware_id_;
     if (!std::isfinite(current_altitude) || current_altitude < 0.0) {
       status.level = DiagnosticStatus::ERROR;
@@ -614,7 +617,7 @@ private:
     const auto current_y = static_cast<double>(msg.position.position.y);
     const auto area = evaluate_area(current_x, current_y);
     DiagnosticStatus status;
-    status.name = "/Navigation/AreaLimit";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Navigation/AreaLimit");
     status.hardware_id = limits_hardware_id_;
     if (area.state == NavigationSafety::ERROR) {
       status.level = DiagnosticStatus::ERROR;
@@ -760,6 +763,7 @@ private:
   std::string marker_frame_id_{"world_ned"};
   std::string limits_hardware_id_{"navigation_limits"};
   std::string frequency_hardware_id_{"navigation"};
+  std::string robot_namespace_;
   double publish_period_{1.0};
   double stale_timeout_{3.0};
   double warn_min_frequency_hz_{10.0};

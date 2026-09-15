@@ -58,7 +58,9 @@ def resolve_parameter_values(parameters, robot_namespace):
     return resolved
 
 
-def diagnostics_node(executable, node_name, parameters):
+def diagnostics_node(executable, node_name, parameters, robot_namespace):
+    parameters = dict(parameters)
+    parameters.setdefault("robot_namespace", robot_namespace)
     return Node(
         package="sura_diagnostics",
         executable=executable,
@@ -79,17 +81,18 @@ def throttle_node(name, input_topic, rate, output_topic):
 
 
 def aggregator_node(profile, robot_namespace):
-    config = profile.get("aggregator", {})
-    parameters = resolve_parameter_values(config.get("parameters", {}), robot_namespace)
-    if not parameters.get("path"):
-        parameters["path"] = robot_namespace.upper()
-
+    config = profile.get("aggregator", {}) or {}
+    parameters = config.get("parameters", {}) or {}
     return Node(
-        package="diagnostic_aggregator",
-        executable="aggregator_node",
-        name="analyzers",
+        package="sura_diagnostics",
+        executable="global_diagnostics_aggregator",
+        name="global_diagnostics_aggregator",
         output="screen",
-        parameters=[parameters],
+        parameters=[{
+            "root_path": "ROBOTS",
+            "pub_rate": float(parameters.get("pub_rate", 1.0)),
+            "stale_timeout": float(parameters.get("stale_timeout", 5.0)),
+        }],
     )
 
 
@@ -103,7 +106,7 @@ def add_simple_diagnostic(actions, name, config, robot_namespace):
         config.get("parameters", {}),
         robot_namespace,
     )
-    actions.append(diagnostics_node(executable, node_name, parameters))
+    actions.append(diagnostics_node(executable, node_name, parameters, robot_namespace))
 
 
 def add_sensor_diagnostic(actions, name, config, robot_namespace):
@@ -136,7 +139,7 @@ def add_sensor_diagnostic(actions, name, config, robot_namespace):
     parameters.setdefault("frequency_topic", raw_topic)
     parameters.setdefault("hardware_id", f"{robot_namespace}_{name}")
 
-    actions.append(diagnostics_node(executable, node_name, parameters))
+    actions.append(diagnostics_node(executable, node_name, parameters, robot_namespace))
 
 
 def launch_setup(context, *args, **kwargs):

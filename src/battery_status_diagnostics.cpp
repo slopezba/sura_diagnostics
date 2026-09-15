@@ -17,6 +17,7 @@ using sura_diagnostics::bool_string;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
 using sura_diagnostics::optional_fixed_string;
+using sura_diagnostics::prefixed_diagnostic_name;
 
 class BatteryStatusDiagnostics : public rclcpp::Node
 {
@@ -26,6 +27,7 @@ public:
   {
     declare_parameter<std::string>("battery_topic", "");
     declare_parameter<std::string>("hardware_id", "battery");
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 2.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("warning_min_percentage", 0.25);
@@ -35,6 +37,7 @@ public:
 
     battery_topic_ = get_parameter("battery_topic").as_string();
     hardware_id_ = get_parameter("hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     warning_min_percentage_ = get_parameter("warning_min_percentage").as_double();
@@ -65,7 +68,7 @@ private:
     const auto age_seconds = has_age ? seconds - last_message_time_ : 0.0;
 
     DiagnosticStatus status;
-    status.name = "/Sensors/Battery";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Sensors/Battery");
     status.hardware_id = hardware_id_;
 
     double voltage = 0.0;
@@ -138,6 +141,7 @@ private:
 
   std::string battery_topic_;
   std::string hardware_id_{"battery"};
+  std::string robot_namespace_;
   double publish_period_{2.0};
   double stale_timeout_{3.0};
   double warning_min_percentage_{0.25};

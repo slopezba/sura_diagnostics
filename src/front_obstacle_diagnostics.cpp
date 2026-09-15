@@ -22,6 +22,7 @@ using sura_diagnostics::bool_string;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
 using sura_diagnostics::optional_fixed_string;
+using sura_diagnostics::prefixed_diagnostic_name;
 
 class FrontObstacleDiagnostics : public rclcpp::Node
 {
@@ -32,6 +33,7 @@ public:
     declare_parameter<std::string>("depth_image_topic", "");
     declare_parameter<std::string>("sensor_hardware_id", "front_depth_camera");
     declare_parameter<std::string>("navigation_hardware_id", "front_obstacle");
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("frequency_window", 5.0);
@@ -47,6 +49,7 @@ public:
     depth_image_topic_ = get_parameter("depth_image_topic").as_string();
     sensor_hardware_id_ = get_parameter("sensor_hardware_id").as_string();
     navigation_hardware_id_ = get_parameter("navigation_hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     frequency_window_ = get_parameter("frequency_window").as_double();
@@ -105,7 +108,7 @@ private:
     const auto frequency = frequency_hz();
 
     DiagnosticStatus status;
-    status.name = "/Sensors/FrontDepthCamera";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Sensors/FrontDepthCamera");
     status.hardware_id = sensor_hardware_id_;
     status.level = DiagnosticStatus::OK;
     status.message = "Front depth camera data is being received";
@@ -128,7 +131,7 @@ private:
     const auto frequency = frequency_hz();
 
     DiagnosticStatus status;
-    status.name = "/Navigation/FrontObstacle";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Navigation/FrontObstacle");
     status.hardware_id = navigation_hardware_id_;
 
     std::vector<KeyValue> validation_values;
@@ -325,6 +328,7 @@ private:
   std::string depth_image_topic_;
   std::string sensor_hardware_id_;
   std::string navigation_hardware_id_;
+  std::string robot_namespace_;
   double publish_period_{1.0};
   double stale_timeout_{3.0};
   double frequency_window_{5.0};

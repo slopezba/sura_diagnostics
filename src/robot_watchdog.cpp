@@ -17,6 +17,7 @@ using sura_msgs::msg::Navigator;
 using sura_msgs::msg::RobotWatchdog;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
+using sura_diagnostics::prefixed_diagnostic_name;
 
 class RobotWatchdogNode : public rclcpp::Node
 {
@@ -26,6 +27,7 @@ public:
   {
     declare_parameter<std::string>("navigator_topic", "");
     declare_parameter<std::string>("hardware_id", "robot_watchdog");
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("warning_timeout", 3600.0);
     declare_parameter<double>("error_timeout_after_warning", 60.0);
@@ -33,6 +35,7 @@ public:
 
     navigator_topic_ = get_parameter("navigator_topic").as_string();
     hardware_id_ = get_parameter("hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     warning_timeout_ = get_parameter("warning_timeout").as_double();
     error_timeout_after_warning_ = get_parameter("error_timeout_after_warning").as_double();
@@ -144,7 +147,7 @@ private:
   DiagnosticStatus build_diagnostic_status(const RobotWatchdog & watchdog_msg) const
   {
     DiagnosticStatus status;
-    status.name = "/Watchdog/Robot";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Watchdog/Robot");
     status.hardware_id = hardware_id_;
 
     if (watchdog_msg.state == RobotWatchdog::ERROR) {
@@ -201,6 +204,7 @@ private:
 
   std::string navigator_topic_;
   std::string hardware_id_{"robot_watchdog"};
+  std::string robot_namespace_;
   double publish_period_{1.0};
   double warning_timeout_{3600.0};
   double error_timeout_after_warning_{60.0};

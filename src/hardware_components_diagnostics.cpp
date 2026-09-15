@@ -20,6 +20,7 @@ using lifecycle_msgs::msg::State;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
 using sura_diagnostics::optional_fixed_string;
+using sura_diagnostics::prefixed_diagnostic_name;
 
 class HardwareComponentsDiagnostics : public rclcpp::Node
 {
@@ -32,6 +33,7 @@ public:
       "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("service_timeout", 2.0);
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<std::vector<std::string>>(
       "component_names", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>(
@@ -40,6 +42,7 @@ public:
     service_name_ = get_parameter("list_hardware_components_service").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     service_timeout_ = get_parameter("service_timeout").as_double();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     component_names_ = get_parameter("component_names").as_string_array();
     diagnostic_names_ = get_parameter("diagnostic_names").as_string_array();
 
@@ -119,7 +122,7 @@ private:
     const std::string & component_name, const std::string & diagnostic_name, double seconds)
   {
     DiagnosticStatus status;
-    status.name = diagnostic_name;
+    status.name = prefixed_diagnostic_name(robot_namespace_, diagnostic_name);
     status.hardware_id = component_name;
 
     const auto component = last_components_.find(component_name);
@@ -188,6 +191,7 @@ private:
   }
 
   std::string service_name_;
+  std::string robot_namespace_;
   double publish_period_{1.0};
   double service_timeout_{2.0};
   std::vector<std::string> component_names_;

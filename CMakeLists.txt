@@ -43,6 +43,7 @@ set(DIAGNOSTIC_EXECUTABLES
   dvl_diagnostics
   front_obstacle_diagnostics
   gps_diagnostics
+  global_diagnostics_aggregator
   hardware_components_diagnostics
   imu_diagnostics
   leak_sensors_diagnostics

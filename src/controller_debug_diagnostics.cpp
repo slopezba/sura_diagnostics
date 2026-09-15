@@ -21,6 +21,7 @@ using sura_msgs::msg::ControllerDebug;
 using sura_diagnostics::bool_string;
 using sura_diagnostics::fixed_string;
 using sura_diagnostics::key_value;
+using sura_diagnostics::prefixed_diagnostic_name;
 
 struct ControllerState
 {
@@ -39,6 +40,7 @@ public:
     declare_parameter<double>("stale_timeout", 2.5);
     declare_parameter<double>("controller_frequency_hz", 100.0);
     declare_parameter<std::string>("hardware_id", "control_stack");
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<bool>("use_controller_manager_update_rate", true);
     declare_parameter<std::string>(
       "controller_manager_node", "");
@@ -50,6 +52,7 @@ public:
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     controller_frequency_hz_ = get_parameter("controller_frequency_hz").as_double();
     hardware_id_ = get_parameter("hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     use_controller_manager_update_rate_ =
       get_parameter("use_controller_manager_update_rate").as_bool();
     controller_manager_node_ = get_parameter("controller_manager_node").as_string();
@@ -161,7 +164,8 @@ private:
     const auto & msg = state.msg;
 
     DiagnosticStatus status;
-    status.name = "/Controllers/" + display_controller_name(controller_name);
+    status.name = prefixed_diagnostic_name(
+      robot_namespace_, "/Controllers/" + display_controller_name(controller_name));
     status.hardware_id = hardware_id_;
 
     const auto configured_period_us = controller_period_us();
@@ -273,7 +277,7 @@ private:
     double worst_max_update_us)
   {
     DiagnosticStatus status;
-    status.name = "/Controllers/Summary";
+    status.name = prefixed_diagnostic_name(robot_namespace_, "/Controllers/Summary");
     status.hardware_id = hardware_id_;
     status.level = level;
     status.message = message;
@@ -314,6 +318,7 @@ private:
   double stale_timeout_{2.5};
   double controller_frequency_hz_{100.0};
   std::string hardware_id_{"control_stack"};
+  std::string robot_namespace_;
   std::string controller_frequency_source_{"configured"};
   bool use_controller_manager_update_rate_{true};
   std::string controller_manager_node_;

@@ -36,6 +36,7 @@ public:
     declare_parameter<std::string>("sensor_topic", default_sensor_topic);
     declare_parameter<std::string>("frequency_topic", default_frequency_topic);
     declare_parameter<std::string>("hardware_id", hardware_id);
+    declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 1.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("frequency_window", 5.0);
@@ -45,16 +46,22 @@ public:
     sensor_topic_ = get_parameter("sensor_topic").as_string();
     frequency_topic_ = get_parameter("frequency_topic").as_string();
     hardware_id_ = get_parameter("hardware_id").as_string();
+    robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     frequency_window_ = get_parameter("frequency_window").as_double();
     warn_min_frequency_hz_ = get_parameter("warn_min_frequency_hz").as_double();
     error_min_frequency_hz_ = get_parameter("error_min_frequency_hz").as_double();
 
+    auto sensor_qos = rclcpp::SensorDataQoS();
     subscription_ = create_subscription<MsgT>(
-      sensor_topic_, 10, [this](const typename MsgT::SharedPtr msg) { on_sensor_msg(msg); });
+      sensor_topic_,
+      sensor_qos,
+      [this](const typename MsgT::SharedPtr msg) { on_sensor_msg(msg); });
     frequency_subscription_ = create_subscription<MsgT>(
-      frequency_topic_, 10, [this](const typename MsgT::SharedPtr msg) { on_frequency_msg(msg); });
+      frequency_topic_,
+      sensor_qos,
+      [this](const typename MsgT::SharedPtr msg) { on_frequency_msg(msg); });
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
     timer_ = create_wall_timer(
       std::chrono::duration<double>(publish_period_),
@@ -105,7 +112,7 @@ private:
     const auto frequency = frequency_hz();
 
     diagnostic_msgs::msg::DiagnosticStatus status;
-    status.name = diagnostic_name_;
+    status.name = prefixed_diagnostic_name(robot_namespace_, diagnostic_name_);
     status.hardware_id = hardware_id_;
 
     std::vector<diagnostic_msgs::msg::KeyValue> validation_values;
@@ -225,6 +232,7 @@ private:
   double error_min_frequency_hz_{0.0};
   std::string diagnostic_name_;
   std::string hardware_id_;
+  std::string robot_namespace_;
 
   typename MsgT::SharedPtr last_sensor_msg_;
   bool has_last_message_time_{false};

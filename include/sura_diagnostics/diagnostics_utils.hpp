@@ -45,6 +45,27 @@ inline diagnostic_msgs::msg::KeyValue key_value(const std::string & key, const s
   return item;
 }
 
+inline std::string strip_slashes(const std::string & value)
+{
+  const auto first = value.find_first_not_of('/');
+  if (first == std::string::npos) {
+    return "";
+  }
+  const auto last = value.find_last_not_of('/');
+  return value.substr(first, last - first + 1);
+}
+
+inline std::string prefixed_diagnostic_name(
+  const std::string & robot_namespace, const std::string & diagnostic_name)
+{
+  const auto normalized_namespace = strip_slashes(robot_namespace);
+  const auto normalized_name = strip_slashes(diagnostic_name);
+  if (normalized_namespace.empty()) {
+    return "/" + normalized_name;
+  }
+  return "/" + normalized_namespace + "/" + normalized_name;
+}
+
 inline std::string bool_string(bool value)
 {
   return value ? "true" : "false";
