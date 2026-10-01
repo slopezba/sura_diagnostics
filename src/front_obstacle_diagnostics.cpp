@@ -38,8 +38,10 @@ public:
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("frequency_window", 5.0);
     declare_parameter<double>("warn_min_frequency_hz", 5.0);
-    declare_parameter<double>("warning_distance_m", 1.0);
-    declare_parameter<double>("error_distance_m", 0.5);
+    declare_parameter<double>("warning_distance_m", 2.0);
+    declare_parameter<double>("error_distance_m", 1.2);
+    declare_parameter<double>("min_image_publish_interval", 0.1);
+    declare_parameter<int>("min_obstacle_pixels", 4);
     declare_parameter<double>("min_valid_depth_m", 0.05);
     declare_parameter<double>("max_valid_depth_m", 10.0);
     declare_parameter<double>("roi_center_fraction_width", 0.6);
@@ -54,6 +56,10 @@ public:
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     frequency_window_ = get_parameter("frequency_window").as_double();
     warn_min_frequency_hz_ = get_parameter("warn_min_frequency_hz").as_double();
+    min_image_publish_interval_ = get_parameter("min_image_publish_interval").as_double();
+    if (!std::isfinite(min_image_publish_interval_) || min_image_publish_interval_ < 0.0) {
+      min_image_publish_interval_ = 0.1;
+    }
 
     subscription_ = create_subscription<Image>(
       depth_image_topic_, 10, [this](const Image::SharedPtr msg) { on_depth_image(msg); });
@@ -69,6 +75,14 @@ private:
     double min_depth_m{std::numeric_limits<double>::quiet_NaN()};
     std::size_t valid_pixels{0};
     std::size_t roi_pixels{0};
+    std::size_t warning_pixels{0};
+    std::size_t error_pixels{0};
+    std::size_t warning_cluster_pixels{0};
+    std::size_t error_cluster_pixels{0};
+    uint32_t roi_width{0};
+    uint32_t roi_height{0};
+    std::vector<uint8_t> warning_mask;
+    std::vector<uint8_t> error_mask;
   };
 
   struct RoiBounds
@@ -87,6 +101,11 @@ private:
     has_last_message_time_ = true;
     frequency_timestamps_.push_back(seconds);
     drop_old_frequency_timestamps(seconds);
+    if (!has_last_publish_time_ || seconds < last_publish_time_ ||
+      seconds - last_publish_time_ >= min_image_publish_interval_)
+    {
+      publish_diagnostics();
+    }
   }
 
   void publish_diagnostics()
@@ -100,6 +119,8 @@ private:
     array_msg.status.push_back(build_sensor_status(seconds));
     array_msg.status.push_back(build_navigation_status(seconds));
     diagnostics_pub_->publish(array_msg);
+    last_publish_time_ = seconds;
+    has_last_publish_time_ = true;
   }
 
   DiagnosticStatus build_sensor_status(double seconds) const
@@ -154,8 +175,19 @@ private:
     const auto min_valid_depth = get_parameter("min_valid_depth_m").as_double();
     const auto max_valid_depth = get_parameter("max_valid_depth_m").as_double();
     const auto min_valid_pixel_ratio = get_parameter("min_valid_pixel_ratio").as_double();
+    const auto min_obstacle_pixels = static_cast<std::size_t>(
+      std::max<int64_t>(1, get_parameter("min_obstacle_pixels").as_int()));
 
-    const auto stats = depth_stats(msg, min_valid_depth, max_valid_depth);
+    auto stats = depth_stats(
+      msg, min_valid_depth, max_valid_depth, warning_distance, error_distance);
+    if (stats.warning_pixels >= min_obstacle_pixels) {
+      stats.warning_cluster_pixels = largest_connected_cluster(
+        stats.warning_mask, stats.roi_width, stats.roi_height);
+    }
+    if (stats.error_pixels >= min_obstacle_pixels) {
+      stats.error_cluster_pixels = largest_connected_cluster(
+        stats.error_mask, stats.roi_width, stats.roi_height);
+    }
     const auto valid_pixel_ratio = stats.roi_pixels > 0 ?
       static_cast<double>(stats.valid_pixels) / static_cast<double>(stats.roi_pixels) :
       0.0;
@@ -166,15 +198,15 @@ private:
     if (!stats.supported_encoding) {
       status.level = DiagnosticStatus::ERROR;
       status.message = "Depth image encoding is not supported";
+    } else if (stats.error_cluster_pixels >= min_obstacle_pixels) {
+      status.level = DiagnosticStatus::ERROR;
+      status.message = "Front obstacle critically close";
+    } else if (stats.warning_cluster_pixels >= min_obstacle_pixels) {
+      status.level = DiagnosticStatus::WARN;
+      status.message = "Front obstacle close";
     } else if (!has_enough_depth) {
       status.level = DiagnosticStatus::WARN;
       status.message = "Front obstacle distance has too few valid depth pixels";
-    } else if (stats.min_depth_m <= error_distance) {
-      status.level = DiagnosticStatus::ERROR;
-      status.message = "Front obstacle critically close";
-    } else if (stats.min_depth_m <= warning_distance) {
-      status.level = DiagnosticStatus::WARN;
-      status.message = "Front obstacle close";
     }
 
     return {
@@ -185,6 +217,11 @@ private:
       key_value("valid_pixels", std::to_string(stats.valid_pixels)),
       key_value("valid_pixel_ratio", fixed_string(valid_pixel_ratio, 4)),
       key_value("min_depth_m", fixed_string(stats.min_depth_m, 4)),
+      key_value("warning_pixels", std::to_string(stats.warning_pixels)),
+      key_value("error_pixels", std::to_string(stats.error_pixels)),
+      key_value("warning_cluster_pixels", std::to_string(stats.warning_cluster_pixels)),
+      key_value("error_cluster_pixels", std::to_string(stats.error_cluster_pixels)),
+      key_value("min_obstacle_pixels", std::to_string(min_obstacle_pixels)),
       key_value("warning_distance_m", fixed_string(warning_distance, 4)),
       key_value("error_distance_m", fixed_string(error_distance, 4)),
       key_value("min_valid_depth_m", fixed_string(min_valid_depth, 4)),
@@ -207,7 +244,9 @@ private:
     };
   }
 
-  DepthStats depth_stats(const Image & msg, double min_valid_depth, double max_valid_depth) const
+  DepthStats depth_stats(
+    const Image & msg, double min_valid_depth, double max_valid_depth,
+    double warning_distance, double error_distance) const
   {
     DepthStats stats;
     stats.supported_encoding = is_supported_encoding(msg.encoding);
@@ -221,8 +260,11 @@ private:
     }
 
     const auto roi = roi_bounds(msg.width, msg.height);
-    stats.roi_pixels = static_cast<std::size_t>(roi.x_end - roi.x_begin) *
-      static_cast<std::size_t>(roi.y_end - roi.y_begin);
+    stats.roi_width = roi.x_end - roi.x_begin;
+    stats.roi_height = roi.y_end - roi.y_begin;
+    stats.roi_pixels = static_cast<std::size_t>(stats.roi_width) * stats.roi_height;
+    stats.warning_mask.resize(stats.roi_pixels, 0);
+    stats.error_mask.resize(stats.roi_pixels, 0);
     stats.min_depth_m = std::numeric_limits<double>::infinity();
 
     for (uint32_t y = roi.y_begin; y < roi.y_end; ++y) {
@@ -237,6 +279,16 @@ private:
         if (std::isfinite(depth) && min_valid_depth <= depth && depth <= max_valid_depth) {
           stats.min_depth_m = std::min(stats.min_depth_m, depth);
           ++stats.valid_pixels;
+          const auto roi_index = static_cast<std::size_t>(y - roi.y_begin) *
+            stats.roi_width + (x - roi.x_begin);
+          if (depth <= warning_distance) {
+            stats.warning_mask[roi_index] = 1;
+            ++stats.warning_pixels;
+          }
+          if (depth <= error_distance) {
+            stats.error_mask[roi_index] = 1;
+            ++stats.error_pixels;
+          }
         }
       }
     }
@@ -245,6 +297,50 @@ private:
       stats.min_depth_m = std::numeric_limits<double>::quiet_NaN();
     }
     return stats;
+  }
+
+  static std::size_t largest_connected_cluster(
+    const std::vector<uint8_t> & mask, uint32_t width, uint32_t height)
+  {
+    if (width == 0 || height == 0) {
+      return 0;
+    }
+    auto remaining = mask;
+    std::vector<std::size_t> pending;
+    std::size_t largest = 0;
+    for (std::size_t index = 0; index < remaining.size(); ++index) {
+      if (remaining[index] == 0) {
+        continue;
+      }
+      pending.push_back(index);
+      remaining[index] = 0;
+      std::size_t cluster_pixels = 0;
+      while (!pending.empty()) {
+        const auto current = pending.back();
+        pending.pop_back();
+        ++cluster_pixels;
+        const auto x = static_cast<int64_t>(current % width);
+        const auto y = static_cast<int64_t>(current / width);
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dx = -1; dx <= 1; ++dx) {
+            const auto nx = x + dx;
+            const auto ny = y + dy;
+            if (nx < 0 || ny < 0 ||
+              nx >= static_cast<int64_t>(width) || ny >= static_cast<int64_t>(height))
+            {
+              continue;
+            }
+            const auto neighbor = static_cast<std::size_t>(ny) * width + nx;
+            if (remaining[neighbor] != 0) {
+              remaining[neighbor] = 0;
+              pending.push_back(neighbor);
+            }
+          }
+        }
+      }
+      largest = std::max(largest, cluster_pixels);
+    }
+    return largest;
   }
 
   RoiBounds roi_bounds(uint32_t width, uint32_t height) const
@@ -333,6 +429,9 @@ private:
   double stale_timeout_{3.0};
   double frequency_window_{5.0};
   double warn_min_frequency_hz_{5.0};
+  double min_image_publish_interval_{0.1};
+  bool has_last_publish_time_{false};
+  double last_publish_time_{0.0};
 
   Image::SharedPtr last_image_;
   bool has_last_message_time_{false};

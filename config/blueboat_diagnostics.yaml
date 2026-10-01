@@ -67,8 +67,8 @@ diagnostics:
           y: 0.0
         warning_margin: 0.5
         rectangle:
-          width: 12.0
-          height: 8.0
+          width: 12.0 # 12.0
+          height: 8.0 # 8.0
 
   battery_status_diagnostics:
     enabled: true

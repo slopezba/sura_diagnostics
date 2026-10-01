@@ -2,7 +2,7 @@ aggregator:
   enabled: true
   parameters:
     path: ""
-    pub_rate: 1.0
+    pub_rate: 5.0
     controllers:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Controllers
@@ -132,12 +132,14 @@ diagnostics:
       stale_timeout: 3.0
       frequency_window: 5.0
       warn_min_frequency_hz: 5.0
-      warning_distance_m: 1.0
-      error_distance_m: 0.5
+      warning_distance_m: 2.0
+      error_distance_m: 1.2
+      min_image_publish_interval: 0.1
+      min_obstacle_pixels: 4
       min_valid_depth_m: 0.05
       max_valid_depth_m: 10.0
-      roi_center_fraction_width: 0.6
-      roi_center_fraction_height: 0.6
+      roi_center_fraction_width: 0.8
+      roi_center_fraction_height: 0.8
       min_valid_pixel_ratio: 0.01
 
 sensors:
