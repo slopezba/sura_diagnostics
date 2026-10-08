@@ -39,7 +39,7 @@ public:
     declare_parameter<double>("frequency_window", 5.0);
     declare_parameter<double>("warn_min_frequency_hz", 5.0);
     declare_parameter<double>("warning_distance_m", 2.0);
-    declare_parameter<double>("error_distance_m", 1.2);
+    declare_parameter<double>("error_distance_m", 0.5);
     declare_parameter<double>("min_image_publish_interval", 0.1);
     declare_parameter<int>("min_obstacle_pixels", 4);
     declare_parameter<double>("min_valid_depth_m", 0.05);

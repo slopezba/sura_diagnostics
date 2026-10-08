@@ -49,9 +49,11 @@ diagnostics:
       limits_hardware_id: "{namespace}_navigation_limits"
       frequency_hardware_id: "{namespace}_navigation"
       publish_period: 1.0
+      frequency_window: 5.0
+      frequency_stale_timeout: 5.0
       stale_timeout: 3.0
       warn_min_frequency_hz: 10.0
-      error_min_frequency_hz: 2.0
+      error_min_frequency_hz: 0.5
       max_depth: 4.0
       depth_warning_margin: 0.5
       min_altitude: 0.3

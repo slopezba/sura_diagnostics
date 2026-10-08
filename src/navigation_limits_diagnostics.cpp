@@ -41,9 +41,11 @@ public:
     declare_parameter<std::string>("frequency_hardware_id", "navigation");
     declare_parameter<std::string>("robot_namespace", "");
     declare_parameter<double>("publish_period", 1.0);
+    declare_parameter<double>("frequency_window", 5.0);
+    declare_parameter<double>("frequency_stale_timeout", 5.0);
     declare_parameter<double>("stale_timeout", 3.0);
     declare_parameter<double>("warn_min_frequency_hz", 10.0);
-    declare_parameter<double>("error_min_frequency_hz", 2.0);
+    declare_parameter<double>("error_min_frequency_hz", 0.5);
     declare_parameter<double>("max_depth", 5.0);
     declare_parameter<double>("depth_warning_margin", 0.5);
     declare_parameter<double>("min_altitude", 0.5);
@@ -81,6 +83,8 @@ public:
     frequency_hardware_id_ = get_parameter("frequency_hardware_id").as_string();
     robot_namespace_ = get_parameter("robot_namespace").as_string();
     publish_period_ = get_parameter("publish_period").as_double();
+    frequency_window_ = get_parameter("frequency_window").as_double();
+    frequency_stale_timeout_ = get_parameter("frequency_stale_timeout").as_double();
     stale_timeout_ = get_parameter("stale_timeout").as_double();
     warn_min_frequency_hz_ = get_parameter("warn_min_frequency_hz").as_double();
     error_min_frequency_hz_ = get_parameter("error_min_frequency_hz").as_double();
@@ -121,14 +125,14 @@ private:
     last_frequency_message_time_ = seconds;
     has_last_frequency_message_time_ = true;
     frequency_timestamps_.push_back(seconds);
-    drop_old_frequency_timestamps(seconds);
+    drop_old_frequency_timestamps(seconds, frequency_window_);
   }
 
   void publish_diagnostics()
   {
     const auto now = get_clock()->now();
     const auto seconds = time_seconds(now);
-    drop_old_frequency_timestamps(seconds);
+    drop_old_frequency_timestamps(seconds, frequency_window_);
     const auto has_age = has_last_message_time_;
     const auto age_seconds = has_age ? seconds - last_message_time_ : 0.0;
     const auto has_frequency_age = has_last_frequency_message_time_;
@@ -500,8 +504,10 @@ private:
     msg.frequency_error_limit = error_min_frequency_hz_;
     msg.frequency_remaining_to_warning = frequency - warn_min_frequency_hz_;
     msg.frequency_remaining_to_error = frequency - error_min_frequency_hz_;
-    if (!has_frequency_age || frequency_age_seconds > stale_timeout_) {
+    if (!has_frequency_age || frequency_age_seconds > frequency_stale_timeout_) {
       msg.frequency_state = NavigationSafety::STALE;
+    } else if (frequency_timestamps_.size() < 2) {
+      msg.frequency_state = NavigationSafety::WARN;
     } else if (frequency < error_min_frequency_hz_) {
       msg.frequency_state = NavigationSafety::ERROR;
     } else if (frequency < warn_min_frequency_hz_) {
@@ -546,9 +552,10 @@ private:
       key_value("topic", frequency_topic_),
       key_value("frequency_hz", fixed_string(safety_msg.frequency_hz, 3)),
       key_value("sample_count", std::to_string(frequency_timestamps_.size())),
-      key_value("window_seconds", fixed_string(publish_period_, 3)),
+      key_value("window_seconds", fixed_string(frequency_window_, 3)),
       key_value("warn_min_frequency_hz", fixed_string(warn_min_frequency_hz_, 3)),
       key_value("error_min_frequency_hz", fixed_string(error_min_frequency_hz_, 3)),
+      key_value("frequency_stale_timeout", fixed_string(frequency_stale_timeout_, 3)),
       key_value("age_seconds", optional_fixed_string(has_age, age_seconds, 3)),
     };
     return status;
@@ -718,10 +725,10 @@ private:
     target.insert(target.end(), values.begin(), values.end());
   }
 
-  void drop_old_frequency_timestamps(double seconds)
+  void drop_old_frequency_timestamps(double seconds, double window)
   {
     while (!frequency_timestamps_.empty() &&
-      seconds - frequency_timestamps_.front() > publish_period_)
+      seconds - frequency_timestamps_.front() > window)
     {
       frequency_timestamps_.pop_front();
     }
@@ -765,9 +772,11 @@ private:
   std::string frequency_hardware_id_{"navigation"};
   std::string robot_namespace_;
   double publish_period_{1.0};
+  double frequency_window_{5.0};
+  double frequency_stale_timeout_{5.0};
   double stale_timeout_{3.0};
   double warn_min_frequency_hz_{10.0};
-  double error_min_frequency_hz_{2.0};
+  double error_min_frequency_hz_{0.5};
   double max_depth_{5.0};
   double depth_warning_margin_{0.5};
   double min_altitude_{0.5};
