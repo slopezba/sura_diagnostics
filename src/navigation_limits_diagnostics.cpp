@@ -117,6 +117,12 @@ private:
     last_navigation_msg_ = msg;
     last_message_time_ = now_seconds();
     has_last_message_time_ = true;
+    const auto area_state = evaluate_area(
+      static_cast<double>(msg->position.position.x),
+      static_cast<double>(msg->position.position.y)).state;
+    if (!has_published_area_state_ || area_state != published_area_state_) {
+      publish_diagnostics();
+    }
   }
 
   void on_frequency_navigator(const Navigator::SharedPtr)
@@ -159,8 +165,10 @@ private:
     array_msg.header.stamp = now;
     array_msg.status = {depth_status, altitude_status, area_status, frequency_status};
     safety_pub_->publish(safety_msg);
-    markers_pub_->publish(build_marker_array(now));
     diagnostics_pub_->publish(array_msg);
+    markers_pub_->publish(build_marker_array(now));
+    published_area_state_ = safety_msg.area_state;
+    has_published_area_state_ = true;
   }
 
   MarkerArray build_marker_array(const rclcpp::Time & stamp) const
@@ -788,6 +796,8 @@ private:
   double rectangle_width_{40.0};
   double rectangle_height_{40.0};
   double radius_warning_margin_{2.0};
+  unsigned char published_area_state_{NavigationSafety::STALE};
+  bool has_published_area_state_{false};
   Navigator::SharedPtr last_navigation_msg_;
   bool has_last_message_time_{false};
   double last_message_time_{0.0};

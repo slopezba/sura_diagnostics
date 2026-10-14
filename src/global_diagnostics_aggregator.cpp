@@ -171,12 +171,23 @@ private:
   void on_diagnostics(const DiagnosticArray::SharedPtr msg)
   {
     const auto now = get_clock()->now();
+    bool area_level_changed = false;
     for (const auto & status : msg->status) {
       const auto parts = split_path(status.name);
       if (!is_robot_status(status, parts)) {
         continue;
       }
-      statuses_[canonical_name(status.name)] = StoredStatus{status, now};
+      const auto name = canonical_name(status.name);
+      const auto previous = statuses_.find(name);
+      if (parts.size() >= 3 && parts[1] == "Navigation" && parts[2] == "AreaLimit" &&
+        (previous == statuses_.end() || previous->second.status.level != status.level))
+      {
+        area_level_changed = true;
+      }
+      statuses_[name] = StoredStatus{status, now};
+    }
+    if (area_level_changed) {
+      publish_aggregated();
     }
   }
 
